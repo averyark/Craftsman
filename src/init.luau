@@ -8,6 +8,7 @@ local MarketServer = nil
 local MarketClient = require("@self/Market/Client")
 const Entity = require("@self/Entity")
 const Player = require("@self/Player")
+const Queue = require("@self/Queue")
 const StringUtil = require("@self/Utilities/StringUtil")
 const AnimationUtil = require("@self/Utilities/AnimationUtil")
 const InputUtil = require("@self/Utilities/InputUtil")
@@ -27,6 +28,7 @@ local Craftsman = {
 	Component = Component,
 	Player = Player,
 	Entity = Entity,
+	Queue = Queue,
 
 	DataServer = DataServer,
 	DataClient = DataClient,

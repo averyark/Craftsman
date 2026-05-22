@@ -11,6 +11,7 @@ const Players = game:GetService("Players")
 const RunService = game:GetService("RunService")
 
 local Signal = require("../Signal")
+const Queue = require("../Queue")
 
 const Config = require("../Config")
 const PrintUtil = require("../Utilities/PrintUtil")
@@ -28,9 +29,9 @@ local Market = {}
 local MarketConfig = Config.MARKET or {}
 
 local Started = false
-local ProcessingReceipts = {}
 local Handlers = {}
 local GamepassCache = {}
+local TransactionQueue = nil
 
 local function get_market_config()
 	return Config.MARKET or {}
@@ -46,6 +47,25 @@ end
 
 local function get_receipts_field()
 	return get_market_config().RECEIPTS_FIELD or "Receipts"
+end
+
+local function get_transaction_queue()
+	if TransactionQueue then
+		return TransactionQueue
+	end
+
+	TransactionQueue = Queue.new({
+		DefaultMaxRetries = 2,
+		DefaultRetryDelay = 0.5,
+		DefaultBackoffFactor = 2,
+		DefaultJitterFactor = 0.15,
+	})
+
+	return TransactionQueue
+end
+
+local function make_transaction_key(player, transaction_type, transaction_id)
+	return `{transaction_type}:{player.UserId}:{transaction_id}`
 end
 
 Market.ProductGranted = Signal.new()
@@ -288,6 +308,24 @@ function Market:PromptGamepass(player, gamepass_id)
 	return true
 end
 
+function Market:_EnqueueTransaction(player, transaction_key, context, callback)
+	local queue = get_transaction_queue()
+
+	local promise = queue:Enqueue(function()
+		local granted, detail, state = callback()
+		if granted then
+			return granted, detail, state
+		end
+
+		error(detail or "TransactionFailed")
+	end, {
+		Key = transaction_key,
+		Context = context,
+	})
+
+	return promise
+end
+
 function Market:_ProcessReceipt(receipt_info)
 	if type(receipt_info) ~= "table" then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
@@ -298,22 +336,14 @@ function Market:_ProcessReceipt(receipt_info)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	if ProcessingReceipts[receipt_id] then
-		return Enum.ProductPurchaseDecision.NotProcessedYet
-	end
-
-	ProcessingReceipts[receipt_id] = true
-
 	local player = Players:GetPlayerByUserId(receipt_info.PlayerId)
 	if not player then
-		ProcessingReceipts[receipt_id] = nil
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
 	local definition = self:GetProductDefinition(receipt_info.ProductId)
 	if not definition then
 		PrintUtil:Warn(`No product handler configured for product {receipt_info.ProductId}`)
-		ProcessingReceipts[receipt_id] = nil
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
@@ -324,9 +354,16 @@ function Market:_ProcessReceipt(receipt_info)
 		CurrencySpent = receipt_info.CurrencySpent,
 		PurchaseDate = receipt_info.PurchaseDate,
 	}
+	local transaction_key = make_transaction_key(player, "Receipt", receipt_id)
 
-	local granted, reason = self:GrantProduct(player, receipt_info.ProductId, context)
-	ProcessingReceipts[receipt_id] = nil
+	local success, granted, reason = self:_EnqueueTransaction(player, transaction_key, context, function()
+		return self:GrantProduct(player, receipt_info.ProductId, context)
+	end):await()
+
+	if not success then
+		reason = granted
+		granted = false
+	end
 
 	if not granted then
 		self.PurchaseFailed:Fire(player, receipt_info.ProductId, definition, reason, context)
@@ -341,6 +378,8 @@ function Market:Init()
 	if not RunService:IsServer() or Started then
 		return
 	end
+
+	get_transaction_queue()
 end
 
 function Market:Start()
@@ -362,7 +401,17 @@ function Market:Start()
 				if success and owns then
 					GamepassCache[player][gp_id] = true
 					task.spawn(function()
-						self:GrantGamepass(player, gp_id)
+						local transaction_key = make_transaction_key(player, "Gamepass", gp_id)
+						self:_EnqueueTransaction(player, transaction_key, {
+							GamepassId = gp_id,
+							SyncSource = "OwnershipCache",
+						}, function()
+							return self:GrantGamepass(player, gp_id, {
+								SyncSource = "OwnershipCache",
+							})
+						end):catch(function(reason)
+							PrintUtil:Warn(`Failed to sync owned gamepass {gp_id} for {player.Name}: {reason}`)
+						end)
 					end)
 				end
 			end
@@ -388,18 +437,25 @@ function Market:Start()
 			return
 		end
 
-		local granted, reason = self:GrantGamepass(player, gamepass_id, {
+		local context = {
+			GamepassId = gamepass_id,
 			WasPurchased = was_purchased,
-		})
+		}
+		local transaction_key = make_transaction_key(player, "Gamepass", gamepass_id)
+		local success, granted, reason = self:_EnqueueTransaction(player, transaction_key, context, function()
+			return self:GrantGamepass(player, gamepass_id, context)
+		end):await()
+
+		if not success then
+			reason = granted
+			granted = false
+		end
 
 		if granted then
 			return
 		end
 
-		self.PurchaseFailed:Fire(player, gamepass_id, self:GetGamepassDefinition(gamepass_id), reason, {
-			GamepassId = gamepass_id,
-			WasPurchased = was_purchased,
-		})
+		self.PurchaseFailed:Fire(player, gamepass_id, self:GetGamepassDefinition(gamepass_id), reason, context)
 		PrintUtil:Warn(`Failed to process gamepass {gamepass_id} for {player.Name}: {reason}`)
 	end)
 
