@@ -6,16 +6,6 @@
     Created     > 20/05/2026
 --]]
 
-local KEYS = {
-	-- Products
-	Add100Coins = 3596765117,
-	Add1000Coins = 3596766189,
-
-	-- Gamepasses
-	Multiply10Coins = 1853669482,
-	Multiply2Coins = 1854485439,
-}
-
 local Config = {
 	DATA = {
 		ENABLED = true,
@@ -23,7 +13,6 @@ local Config = {
 		TEMPLATE = {
 			Receipts = {},
 			Permissions = {},
-			Coins = 0,
 		},
 		BRIDGE_FOLDER_NAME = "CraftsmanDataBridge",
 		STATE_EVENT_NAME = "StateUpdated",
@@ -44,15 +33,9 @@ local Config = {
 		AUTO_START_SERVER = true,
 		AUTO_START_CLIENT = true,
 		RECEIPTS_FIELD = "Receipts",
-		KEYS = KEYS,
-		PRODUCTS = {
-			[KEYS.Add100Coins] = "Add100Coins",
-			[KEYS.Add1000Coins] = "Add1000Coins",
-		},
-		GAMEPASSES = {
-			[KEYS.Multiply10Coins] = "Multiply10Coins",
-			[KEYS.Multiply2Coins] = "Multiply2Coins",
-		},
+		KEYS = {},
+		PRODUCTS = {},
+		GAMEPASSES = {},
 	},
 	MODULE_LOAD_ORDER = {},
 }
@@ -71,7 +54,7 @@ export type ConfigEditType = {
 	DATA: {
 		ENABLED: boolean?,
 		STORE_NAME: string?,
-		TEMPLATE: typeof(Config.DATA.TEMPLATE)?,
+		TEMPLATE: { [any]: any }?,
 		BRIDGE_FOLDER_NAME: string?,
 		STATE_EVENT_NAME: string?,
 		REQUEST_FUNCTION_NAME: string?,
@@ -102,7 +85,7 @@ export type ConfigModule = {
 	DATA: {
 		ENABLED: boolean,
 		STORE_NAME: string,
-		TEMPLATE: typeof(Config.DATA.TEMPLATE),
+		TEMPLATE: { [any]: any },
 		BRIDGE_FOLDER_NAME: string,
 		STATE_EVENT_NAME: string,
 		REQUEST_FUNCTION_NAME: string,
@@ -122,7 +105,7 @@ export type ConfigModule = {
 		AUTO_START_SERVER: boolean,
 		AUTO_START_CLIENT: boolean,
 		RECEIPTS_FIELD: string,
-		KEYS: typeof(KEYS),
+		KEYS: { [string]: number },
 		PRODUCTS: { [any]: any },
 		GAMEPASSES: { [any]: any },
 	},

@@ -26,14 +26,27 @@ end
 local Market = {}
 
 local MarketConfig = Config.MARKET or {}
-local ProductDefinitions = MarketConfig.PRODUCTS or {}
-local GamepassDefinitions = MarketConfig.GAMEPASSES or {}
-local ReceiptsField = MarketConfig.RECEIPTS_FIELD or "Receipts"
 
 local Started = false
 local ProcessingReceipts = {}
 local Handlers = {}
 local GamepassCache = {}
+
+local function get_market_config()
+	return Config.MARKET or {}
+end
+
+local function get_product_definitions()
+	return get_market_config().PRODUCTS or {}
+end
+
+local function get_gamepass_definitions()
+	return get_market_config().GAMEPASSES or {}
+end
+
+local function get_receipts_field()
+	return get_market_config().RECEIPTS_FIELD or "Receipts"
+end
 
 Market.ProductGranted = Signal.new()
 Market.GamepassGranted = Signal.new()
@@ -65,10 +78,11 @@ end
 local function ensure_receipts(state)
 	state = type(state) == "table" and state or {}
 
-	local receipts = state[ReceiptsField]
+	local receipts_field = get_receipts_field()
+	local receipts = state[receipts_field]
 	if type(receipts) ~= "table" then
 		receipts = {}
-		state[ReceiptsField] = receipts
+		state[receipts_field] = receipts
 	end
 
 	return state, receipts
@@ -175,11 +189,11 @@ function Market:RegisterHandler(handler_name, callback)
 end
 
 function Market:GetProductDefinition(product_id)
-	return normalize_definition(ProductDefinitions[product_id])
+	return normalize_definition(get_product_definitions()[product_id])
 end
 
 function Market:GetGamepassDefinition(gamepass_id)
-	return normalize_definition(GamepassDefinitions[gamepass_id])
+	return normalize_definition(get_gamepass_definitions()[gamepass_id])
 end
 
 function Market:UserOwnsGamePass(player, gamepass_id)
@@ -339,7 +353,7 @@ function Market:Start()
 	local function cache_player_gamepasses(player)
 		GamepassCache[player] = {}
 		task.spawn(function()
-			local gamepass_ids = TableUtil.Keys(GamepassDefinitions)
+			local gamepass_ids = TableUtil.Keys(get_gamepass_definitions())
 			for i = 1, #gamepass_ids do
 				local gp_id = gamepass_ids[i]
 				local success, owns = pcall(function()

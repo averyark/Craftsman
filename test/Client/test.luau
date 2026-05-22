@@ -9,6 +9,7 @@ const MarketplaceService = game:GetService("MarketplaceService")
 const Players = game:GetService("Players")
 
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
+const CraftsmanConfig = require("@game/ReplicatedStorage/Shared/CraftsmanConfig")
 const Promise = require("../Packages/Promise")
 
 local test = Craftsman.Component.new({})
@@ -61,8 +62,8 @@ test.Start = function()
 	-- Populate Marketplace UI
 	local marketplace_gui = player_gui:WaitForChild("Marketplace")
 
-	local product_ids = Craftsman.TableUtil.Keys(Craftsman.Config.MARKET.PRODUCTS)
-	local gamepass_ids = Craftsman.TableUtil.Keys(Craftsman.Config.MARKET.GAMEPASSES)
+	local product_ids = Craftsman.TableUtil.Keys(CraftsmanConfig.PRODUCTS)
+	local gamepass_ids = Craftsman.TableUtil.Keys(CraftsmanConfig.GAMEPASSES)
 
 	-- Developer Products
 	local products_container = marketplace_gui:WaitForChild("Products")

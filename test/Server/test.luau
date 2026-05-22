@@ -6,9 +6,8 @@
     Created     > 22/05/2026
 --]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
+const CraftsmanConfig = require("@game/ReplicatedStorage/Shared/CraftsmanConfig")
 
 local test = Craftsman.Component.new({})
 
@@ -49,7 +48,7 @@ test.Start = function()
 
 				-- Apply active multipliers from the gamepass cache natively
 				local multiplier = 1
-				local keys = Craftsman.Config.MARKET.KEYS
+				local keys = CraftsmanConfig.KEYS
 				if Craftsman.MarketServer:UserOwnsGamePass(player, keys.Multiply10Coins) then
 					multiplier *= 10
 				end
@@ -99,7 +98,7 @@ Craftsman.Entity.Spawned:Connect(function(entity)
 end)
 
 Craftsman.Player.Removing:Connect(function(player)
-    LoadedPlayers[player] = nil
+	LoadedPlayers[player] = nil
 end)
 
 return test

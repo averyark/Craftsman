@@ -11,6 +11,9 @@ const RunService = game:GetService("RunService")
 
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
 
+-- Apply user configuration before any services start
+require("@game/ReplicatedStorage/Shared/CraftsmanConfig")
+
 local Bootstrap = {}
 
 function Bootstrap.AddPlayer(player)
