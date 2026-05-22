@@ -1,0 +1,36 @@
+{
+	"devtemplate": {
+		"prefix": ["devtemplate"],
+		"body": [
+			"--!nonstrict",
+			"--[[",
+			"    FileName    > $TM_FILENAME",
+			"    Author      > AveryArk",
+			"    Contact     > Twitter: https://twitter.com/averyark_",
+			"    Created     > ${CURRENT_DATE}/${CURRENT_MONTH}/${CURRENT_YEAR}",
+			"--]]",
+			"",
+			"local ReplicatedStorage = game:GetService(\"ReplicatedStorage\")",
+			"",
+			"local $TM_FILENAME_BASE = {}",
+			"",
+			"",
+			"",
+			"",
+			"return $TM_FILENAME_BASE",
+		],
+		"description": "-"
+	},
+	"sign": {
+		"prefix": ["sign", "signature"],
+		"body": [
+			"--!nonstrict",
+			"--[[",
+			"    FileName    > $TM_FILENAME",
+			"    Author      > AveryArk",
+			"    Contact     > Twitter: https://twitter.com/averyark_",
+			"    Created     > ${CURRENT_DATE}/${CURRENT_MONTH}/${CURRENT_YEAR}",
+			"--]]"
+		]
+	},
+}

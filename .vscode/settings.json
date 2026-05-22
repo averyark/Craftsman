@@ -1,0 +1,6 @@
+{
+    "workbench.colorCustomizations": {
+        "editorUnnecessaryCode.border": "#00ffff"
+    },
+    "task.allowAutomaticTasks": "on"
+}

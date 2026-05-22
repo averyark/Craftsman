@@ -1,0 +1,13 @@
+{
+	"languageMode": "nonstrict",
+	"lint": {
+		"*": false,
+		"UnknownGlobal": true,
+		"DeprecatedGlobal": true,
+		"LocalUnused": true,
+		"ImportUnused": true,
+		"FormatString": true,
+		"FunctionUnused": false,
+		"UnreachableCode": true
+	}
+}
