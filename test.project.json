@@ -19,6 +19,9 @@
           "$path": "index.luau"
         }
       },
+      "CraftsmanConfig": {
+        "$path": "test/CraftsmanConfig.luau"
+      },
       "Shared": {
         "$path": "test/Shared"
       },

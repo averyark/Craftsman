@@ -50,11 +50,14 @@ local function merge_tables(target, source)
 	end
 end
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+export type PlayerState = typeof(require(ReplicatedStorage.CraftsmanConfig).TEMPLATE)
+
 export type ConfigEditType = {
 	DATA: {
 		ENABLED: boolean?,
 		STORE_NAME: string?,
-		TEMPLATE: { [any]: any }?,
+		TEMPLATE: PlayerState?,
 		BRIDGE_FOLDER_NAME: string?,
 		STATE_EVENT_NAME: string?,
 		REQUEST_FUNCTION_NAME: string?,
@@ -85,7 +88,7 @@ export type ConfigModule = {
 	DATA: {
 		ENABLED: boolean,
 		STORE_NAME: string,
-		TEMPLATE: { [any]: any },
+		TEMPLATE: PlayerState,
 		BRIDGE_FOLDER_NAME: string,
 		STATE_EVENT_NAME: string,
 		REQUEST_FUNCTION_NAME: string,

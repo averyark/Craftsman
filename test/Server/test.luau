@@ -7,7 +7,7 @@
 --]]
 
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
-const CraftsmanConfig = require("@game/ReplicatedStorage/Shared/CraftsmanConfig")
+const CraftsmanConfig = require("@game/ReplicatedStorage/CraftsmanConfig")
 
 local test = Craftsman.Component.new({})
 
@@ -20,6 +20,7 @@ test.Start = function()
 	Craftsman.MarketServer:RegisterHandler("Add100Coins", function(player, state, definition, context)
 		local new_state = Craftsman.TableUtil.DeepClone(state)
 		new_state.Coins = (new_state.Coins or 0) + 100
+
 		return new_state
 	end)
 

@@ -16,7 +16,7 @@ const Config = require("../Config")
 const PrintUtil = require("../Utilities/PrintUtil")
 const TableUtil = require("../Utilities/TableUtil")
 
-export type PlayerState = typeof(Config.DATA.TEMPLATE)
+export type PlayerState = Config.PlayerState
 
 local DataServer = nil
 if RunService:IsServer() then

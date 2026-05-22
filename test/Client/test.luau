@@ -9,7 +9,7 @@ const MarketplaceService = game:GetService("MarketplaceService")
 const Players = game:GetService("Players")
 
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
-const CraftsmanConfig = require("@game/ReplicatedStorage/Shared/CraftsmanConfig")
+const CraftsmanConfig = require("@game/ReplicatedStorage/CraftsmanConfig")
 const Promise = require("../Packages/Promise")
 
 local test = Craftsman.Component.new({})

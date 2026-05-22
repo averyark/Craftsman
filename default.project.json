@@ -1,6 +1,51 @@
 {
   "name": "craftsman",
   "tree": {
-    "$path": "src"
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Packages": {
+        "$className": "Folder",
+        "$path": "Packages",
+        "_TestIndex": {
+          "$path": "Packages/_Index",
+          "averyark_craftsman@dev": {
+            "$className": "Folder",
+            "Craftsman": {
+              "$path": "src"
+            }
+          }
+        },
+        "Craftsman": {
+          "$path": "index.luau"
+        }
+      },
+      "CraftsmanConfig": {
+        "$path": "test/CraftsmanConfig.luau"
+      },
+      "Shared": {
+        "$path": "test/Shared"
+      },
+      "Client": {
+        "$path": "test/Client"
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Server": {
+        "$path": "test/Server"
+      },
+      "Bootstrap": {
+          "$path": "test/Bootstrap.server.luau"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Bootstrap": {
+          "$path": "test/Bootstrap.client.luau"
+        }
+      }
+    }
   }
 }

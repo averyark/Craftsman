@@ -15,7 +15,7 @@ const Config = require(".././Config")
 const TableUtil = require("../Utilities/TableUtil")
 local Signal = require("../Signal")
 
-export type PlayerState = typeof(Config.DATA.TEMPLATE)
+export type PlayerState = Config.PlayerState
 
 local Client = {}
 

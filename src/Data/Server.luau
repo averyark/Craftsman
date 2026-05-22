@@ -19,7 +19,7 @@ local Signal = require("../Signal")
 const Config = require(".././Config") -- Your default data dictionary
 const PrintUtil = require("../Utilities/PrintUtil")
 
-export type PlayerState = typeof(Config.DATA.TEMPLATE)
+export type PlayerState = Config.PlayerState
 
 local Data = {}
 
@@ -268,11 +268,12 @@ function Data:Init()
 	DocumentStore = DocumentService.DocumentStore.new({
 		dataStore = data_store,
 		check = function(value)
-			if not validate_template(DataConfig.TEMPLATE, value) then
+			local mutable_value = deep_clone(value)
+			if not validate_template(DataConfig.TEMPLATE, mutable_value) then
 				return false, DefaultState
 			end
 
-			return true, value
+			return true, mutable_value
 		end,
 		default = clone_template(),
 		migrations = {},

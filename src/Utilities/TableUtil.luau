@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > TableUti.luau
     Author      > AveryArk
@@ -8,27 +8,27 @@
 
 local TableUtil = {}
 
-function TableUtil.DeepClone(value, seen)
+function TableUtil.DeepClone<T>(value: T, seen: { [any]: any }?): T
 	if type(value) ~= "table" then
 		return value
 	end
 
-	seen = seen or {}
-	if seen[value] then
-		return seen[value]
+	local seen_table = seen or {}
+	if seen_table[value] then
+		return seen_table[value]
 	end
 
 	local clone = {}
-	seen[value] = clone
+	seen_table[value] = clone
 
-	for key, child in value do
-		clone[TableUtil.DeepClone(key, seen)] = TableUtil.DeepClone(child, seen)
+	for key, child in value :: any do
+		clone[TableUtil.DeepClone(key, seen_table)] = TableUtil.DeepClone(child, seen_table)
 	end
 
-	return clone
+	return clone :: any
 end
 
-function TableUtil.Merge(...)
+function TableUtil.Merge(...: { [any]: any }): { [any]: any }
 	local merged = {}
 	local sources = { ... }
 
@@ -46,7 +46,7 @@ function TableUtil.Merge(...)
 	return merged
 end
 
-function TableUtil.DeepMerge(...)
+function TableUtil.DeepMerge(...: { [any]: any }): { [any]: any }
 	local merged = {}
 	local sources = { ... }
 
@@ -68,11 +68,11 @@ function TableUtil.DeepMerge(...)
 	return merged
 end
 
-function TableUtil.IsEmpty(dict)
+function TableUtil.IsEmpty(dict: { [any]: any }): boolean
 	return next(dict) == nil
 end
 
-function TableUtil.Keys(dict)
+function TableUtil.Keys<K>(dict: { [K]: any }): { K }
 	local keys = {}
 
 	for key in dict do
@@ -82,7 +82,7 @@ function TableUtil.Keys(dict)
 	return keys
 end
 
-function TableUtil.Values(dict)
+function TableUtil.Values<V>(dict: { [any]: V }): { V }
 	local values = {}
 
 	for _, value in dict do
@@ -92,7 +92,7 @@ function TableUtil.Values(dict)
 	return values
 end
 
-function TableUtil.FindKeyByValue(dict, target_value)
+function TableUtil.FindKeyByValue<K, V>(dict: { [K]: V }, target_value: V): K?
 	for key, value in dict do
 		if value == target_value then
 			return key
@@ -102,7 +102,7 @@ function TableUtil.FindKeyByValue(dict, target_value)
 	return nil
 end
 
-function TableUtil.RemoveValue(dict, target_value)
+function TableUtil.RemoveValue<K, V>(dict: { [K]: V }, target_value: V): boolean
 	local removed = false
 
 	for key, value in dict do
@@ -110,14 +110,14 @@ function TableUtil.RemoveValue(dict, target_value)
 			continue
 		end
 
-		dict[key] = nil
+		(dict :: any)[key] = nil
 		removed = true
 	end
 
 	return removed
 end
 
-function TableUtil.RemoveWhere(dict, predicate)
+function TableUtil.RemoveWhere<K, V>(dict: { [K]: V }, predicate: (value: V, key: K, dict: { [K]: V }) -> boolean): boolean
 	local removed = false
 
 	for key, value in dict do
@@ -125,18 +125,18 @@ function TableUtil.RemoveWhere(dict, predicate)
 			continue
 		end
 
-		dict[key] = nil
+		(dict :: any)[key] = nil
 		removed = true
 	end
 
 	return removed
 end
 
-function TableUtil.HasKey(dict, key)
+function TableUtil.HasKey<K>(dict: { [K]: any }, key: K): boolean
 	return dict[key] ~= nil
 end
 
-function TableUtil.GetOrDefault(dict, key, default_value)
+function TableUtil.GetOrDefault<K, V>(dict: { [K]: V }, key: K, default_value: V): V
 	local value = dict[key]
 	if value ~= nil then
 		return value
@@ -145,7 +145,7 @@ function TableUtil.GetOrDefault(dict, key, default_value)
 	return default_value
 end
 
-function TableUtil.Count(dict)
+function TableUtil.Count(dict: { [any]: any }): number
 	local count = 0
 
 	for _ in dict do
@@ -155,7 +155,7 @@ function TableUtil.Count(dict)
 	return count
 end
 
-function TableUtil.EqualDeep(left, right, seen)
+function TableUtil.EqualDeep(left: any, right: any, seen: { [any]: any }?): boolean
 	if left == right then
 		return true
 	end
@@ -164,25 +164,25 @@ function TableUtil.EqualDeep(left, right, seen)
 		return false
 	end
 
-	seen = seen or {}
-	local left_seen = seen[left]
+	local seen_table = seen or {}
+	local left_seen = seen_table[left]
 	if left_seen and left_seen[right] then
 		return true
 	end
 
 	left_seen = left_seen or {}
-	seen[left] = left_seen
+	seen_table[left] = left_seen
 	left_seen[right] = true
 
-	for key, left_value in left do
-		local right_value = right[key]
-		if not TableUtil.EqualDeep(left_value, right_value, seen) then
+	for key, left_value in left :: any do
+		local right_value = (right :: any)[key]
+		if not TableUtil.EqualDeep(left_value, right_value, seen_table) then
 			return false
 		end
 	end
 
-	for key, _ in right do
-		if left[key] == nil then
+	for key, _ in right :: any do
+		if (left :: any)[key] == nil then
 			return false
 		end
 	end
@@ -190,7 +190,7 @@ function TableUtil.EqualDeep(left, right, seen)
 	return true
 end
 
-function TableUtil.SafeRemove(array, value)
+function TableUtil.SafeRemove<T>(array: { T }, value: T): boolean
 	local index = table.find(array, value)
 	if index then
 		table.remove(array, index)
@@ -199,7 +199,7 @@ function TableUtil.SafeRemove(array, value)
 	return false
 end
 
-function TableUtil.SafeRemoveAll(array, value)
+function TableUtil.SafeRemoveAll<T>(array: { T }, value: T): boolean
 	local removed = false
 	for i = #array, 1, -1 do
 		if array[i] == value then

@@ -6,8 +6,6 @@
     Created     > 23/05/2026
 --]]
 
-const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
-
 local KEYS = {
 	-- Products
 	Add100Coins = 3596765117,
@@ -33,17 +31,6 @@ local TEMPLATE = {
 	Permissions = {},
 	Coins = 0,
 }
-
-Craftsman.Config:Edit({
-	DATA = {
-		TEMPLATE = TEMPLATE,
-	},
-	MARKET = {
-		KEYS = KEYS,
-		PRODUCTS = PRODUCTS,
-		GAMEPASSES = GAMEPASSES,
-	},
-})
 
 return {
 	KEYS = KEYS,

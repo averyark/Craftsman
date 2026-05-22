@@ -271,7 +271,7 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 export type PermissionMap = { [string]: boolean }
-export type PlayerState = typeof(Config.DATA.TEMPLATE)
+export type PlayerState = Config.PlayerState
 
 export type PlayerObject = {
 	Keeper: any,
