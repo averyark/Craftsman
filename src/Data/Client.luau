@@ -12,6 +12,7 @@ const Players = game:GetService("Players")
 
 const Reflex = require("../../../../Reflex")
 const Config = require(".././Config")
+const Network = require("./Network")
 const TableUtil = require("../Utilities/TableUtil")
 local Signal = require("../Signal")
 
@@ -26,9 +27,10 @@ local REQUEST_FUNCTION_NAME = DataConfig.REQUEST_FUNCTION_NAME or "RequestState"
 
 local DefaultState: PlayerState = nil :: any
 local BridgeFolder = nil
-local StateEvent = nil
-local RequestFunction = nil
 local StateProducer = nil
+
+local IsLoaded = false
+local LoadedState: PlayerState = nil :: any
 
 local function normalize_state(value)
 	if type(value) ~= "table" then
@@ -73,9 +75,6 @@ local function ensure_bridge()
 	end
 
 	BridgeFolder = ReplicatedStorage:WaitForChild(BRIDGE_FOLDER_NAME)
-	StateEvent = BridgeFolder:WaitForChild(STATE_EVENT_NAME) :: RemoteEvent
-	RequestFunction = BridgeFolder:WaitForChild(REQUEST_FUNCTION_NAME) :: RemoteFunction
-
 	return BridgeFolder
 end
 
@@ -87,7 +86,37 @@ end
 
 DefaultState = normalize_state(DataConfig.TEMPLATE)
 
-Client.Loaded = Signal.new() :: Signal.Signal<Player, PlayerState>
+local RealLoadedSignal = Signal.new()
+Client.Loaded = {
+	Connect = function(self, fn)
+		local conn = RealLoadedSignal:Connect(fn)
+		if IsLoaded then
+			task.spawn(fn, Players.LocalPlayer, LoadedState)
+		end
+		return conn
+	end,
+	Once = function(self, fn)
+		if IsLoaded then
+			task.spawn(fn, Players.LocalPlayer, LoadedState)
+			return {
+				Disconnect = function() end,
+				Destroy = function() end,
+				Connected = false,
+			}
+		end
+		return RealLoadedSignal:Once(fn)
+	end,
+	Wait = function(self)
+		if IsLoaded then
+			return Players.LocalPlayer, LoadedState
+		end
+		return RealLoadedSignal:Wait()
+	end,
+	Fire = function(self, ...)
+		RealLoadedSignal:Fire(...)
+	end,
+} :: any
+
 Client.Saved = Signal.new() :: Signal.Signal<Player, PlayerState>
 
 function Client:Init()
@@ -103,8 +132,15 @@ function Client:Init()
 
 	ensure_bridge()
 
-	StateEvent.OnClientEvent:Connect(function(next_state)
-		sync_state(next_state)
+	Network.packets.StateUpdated.listen(function(next_state)
+		if type(next_state) == "table" then
+			if not IsLoaded then
+				IsLoaded = true
+				LoadedState = next_state
+				Client.Loaded:Fire(Players.LocalPlayer, next_state)
+			end
+			sync_state(next_state)
+		end
 	end)
 end
 
@@ -117,7 +153,7 @@ function Client:Start()
 
 	task.spawn(function()
 		local ok, initial_state = pcall(function()
-			return RequestFunction:InvokeServer()
+			return Network.queries.RequestState.invoke()
 		end)
 
 		if not ok then
@@ -125,8 +161,12 @@ function Client:Start()
 		end
 
 		if type(initial_state) == "table" then
-			sync_state(initial_state)
-			Client.Loaded:Fire(Players.LocalPlayer, initial_state)
+			if not IsLoaded then
+				IsLoaded = true
+				LoadedState = initial_state
+				Client.Loaded:Fire(Players.LocalPlayer, initial_state)
+				sync_state(initial_state)
+			end
 		end
 	end)
 end
@@ -153,8 +193,12 @@ function Client:Wait()
 	return ensure_producer():Wait()
 end
 
-function Client:Subscribe(...)
-	return ensure_producer():subscribe(...)
+function Client:Subscribe(listener)
+	local conn = ensure_producer():subscribe(listener)
+	if IsLoaded then
+		task.spawn(listener, LoadedState, nil)
+	end
+	return conn
 end
 
 function Client:Observe(...)

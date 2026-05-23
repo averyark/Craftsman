@@ -17,6 +17,7 @@ const Reflex = require("../../../../Reflex")
 local Signal = require("../Signal")
 
 const Config = require(".././Config") -- Your default data dictionary
+const Network = require("./Network")
 const PrintUtil = require("../Utilities/PrintUtil")
 
 export type PlayerState = Config.PlayerState
@@ -31,8 +32,6 @@ local REQUEST_FUNCTION_NAME = DataConfig.REQUEST_FUNCTION_NAME or "RequestState"
 local DefaultState: PlayerState = nil :: any
 local DocumentStore = (nil :: any) :: typeof(DocumentService.DocumentStore.new(...))
 local BridgeFolder = nil
-local StateEvent = nil
-local RequestFunction = nil
 
 local function deep_clone(value)
 	if type(value) ~= "table" then
@@ -97,23 +96,7 @@ local function create_bridge()
 		bridge_folder.Parent = ReplicatedStorage
 	end
 
-	local state_event = bridge_folder:FindFirstChild(STATE_EVENT_NAME)
-	if not state_event then
-		state_event = Instance.new("RemoteEvent")
-		state_event.Name = STATE_EVENT_NAME
-		state_event.Parent = bridge_folder
-	end
-
-	local request_function = bridge_folder:FindFirstChild(REQUEST_FUNCTION_NAME)
-	if not request_function then
-		request_function = Instance.new("RemoteFunction")
-		request_function.Name = REQUEST_FUNCTION_NAME
-		request_function.Parent = bridge_folder
-	end
-
 	BridgeFolder = bridge_folder
-	StateEvent = state_event
-	RequestFunction = request_function
 end
 
 local function clone_template()
@@ -187,8 +170,8 @@ local function get_record(player: Player): Record
 end
 
 local function sync_client(player, state)
-	if StateEvent and player.Parent then
-		StateEvent:FireClient(player, state)
+	if player.Parent then
+		Network.packets.StateUpdated.sendTo(state, player)
 	end
 end
 
@@ -245,7 +228,41 @@ end
 
 DefaultState = normalize_state(DataConfig.TEMPLATE)
 
-Data.Loaded = Signal.new() :: Signal.Signal<Player, PlayerState>
+local RealLoadedSignal = Signal.new()
+Data.Loaded = {
+	Connect = function(self, fn)
+		local conn = RealLoadedSignal:Connect(fn)
+
+		for player, record in next, PlayerRecords do
+			if record.Loaded then
+				task.spawn(fn, player, record.Producer:getState())
+			end
+		end
+
+		return conn
+	end,
+	Once = function(self, fn)
+		for player, record in next, PlayerRecords do
+			if record.Loaded then
+				task.spawn(fn, player, record.Producer:getState())
+				return {
+					Disconnect = function() end,
+					Destroy = function() end,
+					Connected = false,
+				}
+			end
+		end
+
+		return RealLoadedSignal:Once(fn)
+	end,
+	Wait = function(self)
+		return RealLoadedSignal:Wait()
+	end,
+	Fire = function(self, ...)
+		RealLoadedSignal:Fire(...)
+	end,
+} :: any
+
 Data.Saved = Signal.new() :: Signal.Signal<Player, PlayerState>
 
 function Data:Init()
@@ -283,8 +300,8 @@ function Data:Init()
 
 	Data.DocumentStore = DocumentStore
 	Data.BridgeFolder = BridgeFolder
-	Data.StateEvent = StateEvent
-	Data.RequestFunction = RequestFunction
+	Data.StateEvent = nil
+	Data.RequestFunction = nil
 	Data.DefaultState = DefaultState
 end
 
@@ -298,6 +315,11 @@ end
 
 function Data:GetState(player: Player)
 	local record = get_record(player)
+	if not record.Loaded and record.LoadPromise then
+		pcall(function()
+			record.LoadPromise:await()
+		end)
+	end
 	return normalize_state(record.Producer:getState())
 end
 
@@ -490,10 +512,10 @@ function Data:Start()
 		end)
 	end
 
-	if RequestFunction and DataConfig.SYNC_CLIENT ~= false then
-		RequestFunction.OnServerInvoke = function(player)
+	if DataConfig.SYNC_CLIENT ~= false then
+		Network.queries.RequestState.listen(function(_data, player)
 			return self:GetState(player)
-		end
+		end)
 	end
 end
 
