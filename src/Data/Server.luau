@@ -26,8 +26,8 @@ local Data = {}
 
 local DataConfig = Config.DATA or {}
 local BRIDGE_FOLDER_NAME = DataConfig.BRIDGE_FOLDER_NAME or "CraftsmanDataBridge"
-local STATE_EVENT_NAME = DataConfig.STATE_EVENT_NAME or "StateUpdated"
-local REQUEST_FUNCTION_NAME = DataConfig.REQUEST_FUNCTION_NAME or "RequestState"
+local _STATE_EVENT_NAME = DataConfig.STATE_EVENT_NAME or "StateUpdated"
+local _REQUEST_FUNCTION_NAME = DataConfig.REQUEST_FUNCTION_NAME or "RequestState"
 
 local DefaultState: PlayerState = nil :: any
 local DocumentStore = (nil :: any) :: typeof(DocumentService.DocumentStore.new(...))
@@ -103,6 +103,16 @@ local function clone_template()
 	return normalize_state(DefaultState)
 end
 
+local function reconcile_state(state)
+	local mutable_state = deep_clone(state)
+
+	if not validate_template(DataConfig.TEMPLATE, mutable_state) then
+		return clone_template()
+	end
+
+	return normalize_state(mutable_state)
+end
+
 local function make_producer(initial_state)
 	return Reflex.createProducer(initial_state, {
 		SetState = function(state, next_state)
@@ -176,7 +186,7 @@ local function sync_client(player, state)
 end
 
 local function settle_loaded_state(player, record, state)
-	local normalized_state = normalize_state(state)
+	local normalized_state = reconcile_state(state)
 	record.Producer.SetState(normalized_state)
 	record.Document:SetCache(normalized_state)
 	record.Loaded = true
