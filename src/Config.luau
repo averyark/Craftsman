@@ -41,7 +41,7 @@ local Config = {
 }
 
 local function merge_tables(target, source)
-	for k, v in next, source do
+	for k, v in source do
 		if type(v) == "table" and type(target[k]) == "table" then
 			merge_tables(target[k], v)
 		else
@@ -51,7 +51,9 @@ local function merge_tables(target, source)
 end
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-export type PlayerState = typeof(require(ReplicatedStorage.CraftsmanConfig).TEMPLATE)
+local CraftsmanConfig = require(ReplicatedStorage.CraftsmanConfig)
+
+export type PlayerState = typeof(CraftsmanConfig.TEMPLATE)
 
 export type ConfigEditType = {
 	DATA: {
@@ -119,5 +121,7 @@ export type ConfigModule = {
 function Config:Edit(changes: ConfigEditType)
 	merge_tables(Config, changes)
 end
+
+merge_tables(Config, CraftsmanConfig)
 
 return (Config :: any) :: ConfigModule
