@@ -124,6 +124,7 @@ function Client:Init()
 		return
 	end
 
+	DefaultState = normalize_state(DataConfig.TEMPLATE)
 	ensure_producer()
 
 	if not RunService:IsClient() or DataConfig.ENABLED == false or DataConfig.AUTO_START_CLIENT == false then

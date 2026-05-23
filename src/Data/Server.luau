@@ -270,6 +270,8 @@ function Data:Init()
 		return
 	end
 
+	DefaultState = normalize_state(DataConfig.TEMPLATE)
+
 	if DataConfig.ENABLED == false then
 		Data.DocumentStore = nil
 		Data.BridgeFolder = nil
