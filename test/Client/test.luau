@@ -1,8 +1,9 @@
 --!nonstrict
 --[[
-    FileName    > test.luau
-    Author      > Antigravity
-    Created     > 22/05/2026
+	FileName    > test.luau
+	Author      > AveryArk
+	Contact     > Twitter: https://twitter.com/averyark_
+	Created     > 23/05/2026
 --]]
 
 const MarketplaceService = game:GetService("MarketplaceService")
@@ -62,8 +63,8 @@ test.Start = function()
 	-- Populate Marketplace UI
 	local marketplace_gui = player_gui:WaitForChild("Marketplace")
 
-	local product_ids = Craftsman.TableUtil.Keys(CraftsmanConfig.PRODUCTS)
-	local gamepass_ids = Craftsman.TableUtil.Keys(CraftsmanConfig.GAMEPASSES)
+	local product_ids = Craftsman.TableUtil.Keys(CraftsmanConfig.MARKET.PRODUCTS)
+	local gamepass_ids = Craftsman.TableUtil.Keys(CraftsmanConfig.MARKET.GAMEPASSES)
 
 	-- Developer Products
 	local products_container = marketplace_gui:WaitForChild("Products")

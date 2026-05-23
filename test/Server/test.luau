@@ -49,7 +49,7 @@ test.Start = function()
 
 				-- Apply active multipliers from the gamepass cache natively
 				local multiplier = 1
-				local keys = CraftsmanConfig.KEYS
+				local keys = CraftsmanConfig.MARKET.KEYS
 				if Craftsman.MarketServer:UserOwnsGamePass(player, keys.Multiply10Coins) then
 					multiplier *= 10
 				end
