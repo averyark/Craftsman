@@ -10,10 +10,15 @@ const Keeper = require("../../../../Keeper")
 const Promise = require("../../../../Promise")
 const Signal = require("../../../../Signal")
 
-const AnimationUtil = {}
+local AnimationUtilModule = {}
+
+local AnimationUtil = {}
 AnimationUtil.__index = AnimationUtil
 
-function AnimationUtil.new(animator, animation_map)
+type AnimationMap = { [string]: string }
+type PromiseLike = typeof(Promise.new(function() end))
+
+function AnimationUtilModule.new(animator: Animator, animation_map: AnimationMap?)
 	local self = setmetatable({}, AnimationUtil)
 	self.Keeper = Keeper.new()
 
@@ -21,7 +26,7 @@ function AnimationUtil.new(animator, animation_map)
 	self.AnimationMap = animation_map or {}
 	self.AnimationInstances = {}
 	self.Tracks = {}
-	self.ActivePromises = {}
+	self.ActivePromises = {} :: { [string]: PromiseLike }
 
 	-- Keeper:Construct automatically cleans up the signals when the component dies
 	self.OnPlay = self.Keeper:Construct(Signal)
@@ -30,11 +35,13 @@ function AnimationUtil.new(animator, animation_map)
 	return self
 end
 
-function AnimationUtil:AddAnimationId(name, animation_id)
+export type AnimationUtil = typeof(AnimationUtilModule.new(...))
+
+function AnimationUtil.AddAnimationId(self: AnimationUtil, name: string, animation_id: string)
 	self.AnimationMap[name] = animation_id
 end
 
-function AnimationUtil:_StopLoadedAnimation(name, fade_time)
+function AnimationUtil._StopLoadedAnimation(self: AnimationUtil, name: string, fade_time: number?)
 	local track = self.Tracks[name]
 	if not track then
 		return
@@ -49,7 +56,7 @@ function AnimationUtil:_StopLoadedAnimation(name, fade_time)
 	self.OnStop:Fire(name, track)
 end
 
-function AnimationUtil:_RemoveLoadedAnimation(name, fade_time)
+function AnimationUtil._RemoveLoadedAnimation(self: AnimationUtil, name: string, fade_time: number?)
 	local track = self.Tracks[name]
 	if track then
 		self:_StopLoadedAnimation(name, fade_time)
@@ -66,25 +73,26 @@ function AnimationUtil:_RemoveLoadedAnimation(name, fade_time)
 	self.AnimationMap[name] = nil
 end
 
-function AnimationUtil:RemoveAnimation(name, fade_time)
+function AnimationUtil.RemoveAnimation(self: AnimationUtil, name: string, fade_time: number?)
 	self:_RemoveLoadedAnimation(name, fade_time)
 end
 
-function AnimationUtil:RemoveAnimationId(animation_id, fade_time)
+function AnimationUtil.RemoveAnimationId(self: AnimationUtil, animation_id: string, fade_time: number?)
 	local names_to_remove = {}
 
 	for name, registered_animation_id in self.AnimationMap do
 		if registered_animation_id == animation_id then
-			table.insert(names_to_remove, name)
+			names_to_remove[#names_to_remove + 1] = name
 		end
 	end
 
-	for _, name in names_to_remove do
+	for index = 1, #names_to_remove do
+		local name = names_to_remove[index]
 		self:_RemoveLoadedAnimation(name, fade_time)
 	end
 end
 
-function AnimationUtil:Load(name)
+function AnimationUtil.Load(self: AnimationUtil, name: string): AnimationTrack
 	local animation_instance = Instance.new("Animation")
 	animation_instance.AnimationId = self.AnimationMap[name]
 	animation_instance.Name = name
@@ -101,7 +109,7 @@ function AnimationUtil:Load(name)
 	return track
 end
 
-function AnimationUtil:EnsureLoaded(name)
+function AnimationUtil.EnsureLoaded(self: AnimationUtil, name: string): AnimationTrack
 	if self.Tracks[name] then
 		return self.Tracks[name]
 	end
@@ -109,14 +117,20 @@ function AnimationUtil:EnsureLoaded(name)
 	return self:Load(name)
 end
 
-function AnimationUtil:Play(name, fade_time, weight, speed)
+function AnimationUtil.Play(self: AnimationUtil, name: string, fade_time: number?, weight: number?, speed: number?)
 	local track = self:EnsureLoaded(name)
 
 	track:Play(fade_time, weight, speed)
 	self.OnPlay:Fire(name, track)
 end
 
-function AnimationUtil:PlayAsync(name, fade_time, weight, speed)
+function AnimationUtil.PlayAsync(
+	self: AnimationUtil,
+	name: string,
+	fade_time: number?,
+	weight: number?,
+	speed: number?
+): PromiseLike
 	local track = self:EnsureLoaded(name)
 
 	-- Cancel the existing promise if this animation is already playing
@@ -147,7 +161,7 @@ function AnimationUtil:PlayAsync(name, fade_time, weight, speed)
 	return play_promise
 end
 
-function AnimationUtil:Stop(name, fade_time)
+function AnimationUtil.Stop(self: AnimationUtil, name: string, fade_time: number?)
 	local track = self.Tracks[name]
 	if not track then
 		return
@@ -161,13 +175,13 @@ function AnimationUtil:Stop(name, fade_time)
 	end
 end
 
-function AnimationUtil:StopAll(fade_time)
-	for name, _ in pairs(self.Tracks) do
+function AnimationUtil.StopAll(self: AnimationUtil, fade_time: number?)
+	for name in self.Tracks do
 		self:Stop(name, fade_time)
 	end
 end
 
-function AnimationUtil:OnMarker(name, marker_name, callback)
+function AnimationUtil.OnMarker(self: AnimationUtil, name: string, marker_name: string, callback: () -> ())
 	local track = self:EnsureLoaded(name)
 
 	local connection = track:GetMarkerReachedSignal(marker_name):Connect(callback)
@@ -176,11 +190,11 @@ function AnimationUtil:OnMarker(name, marker_name, callback)
 	return connection
 end
 
-function AnimationUtil:MarkerAsync(name, marker_name)
+function AnimationUtil.MarkerAsync(self: AnimationUtil, name: string, marker_name: string): PromiseLike
 	local track = self:EnsureLoaded(name)
 
 	-- Creates a promise that resolves exactly when the event fires
 	return Promise.fromEvent(track:GetMarkerReachedSignal(marker_name))
 end
 
-return AnimationUtil
+return AnimationUtilModule

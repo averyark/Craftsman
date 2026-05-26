@@ -12,10 +12,16 @@ const Keeper = require("../../../../Keeper")
 const Promise = require("../../../../Promise")
 const Signal = require("../../../../Signal")
 
-const SoundUtil = {}
+local SoundUtilModule = {}
+
+local SoundUtil = {}
 SoundUtil.__index = SoundUtil
 
-function SoundUtil.new(target_instance, sound_map)
+type SoundMap = { [string]: string }
+type SoundProperties = { [string]: any }
+type PromiseLike = typeof(Promise.new(function() end))
+
+function SoundUtilModule.new(target_instance: Instance, sound_map: SoundMap?)
 	local self = setmetatable({}, SoundUtil)
 	self.Keeper = Keeper.new()
 
@@ -23,7 +29,7 @@ function SoundUtil.new(target_instance, sound_map)
 	self.SoundMap = sound_map or {}
 	self.Sounds = {}
 	self.SoundKeepers = {}
-	self.ActivePromises = {}
+	self.ActivePromises = {} :: { [string]: PromiseLike }
 
 	self.OnPlay = self.Keeper:Construct(Signal)
 	self.OnStop = self.Keeper:Construct(Signal)
@@ -31,15 +37,17 @@ function SoundUtil.new(target_instance, sound_map)
 	return self
 end
 
-function SoundUtil:AddSound(name, sound_id)
+export type SoundUtil = typeof(SoundUtilModule.new(...))
+
+function SoundUtil.AddSound(self: SoundUtil, name: string, sound_id: string)
 	self.SoundMap[name] = sound_id
 end
 
-function SoundUtil:AddSoundId(name, sound_id)
+function SoundUtil.AddSoundId(self: SoundUtil, name: string, sound_id: string)
 	self:AddSound(name, sound_id)
 end
 
-function SoundUtil:_StopLoadedSound(name)
+function SoundUtil._StopLoadedSound(self: SoundUtil, name: string)
 	local sound = self.Sounds[name]
 	if not sound then
 		return
@@ -54,7 +62,7 @@ function SoundUtil:_StopLoadedSound(name)
 	self.OnStop:Fire(name, sound)
 end
 
-function SoundUtil:_RemoveLoadedSound(name)
+function SoundUtil._RemoveLoadedSound(self: SoundUtil, name: string)
 	local sound = self.Sounds[name]
 	if sound then
 		self:_StopLoadedSound(name)
@@ -76,25 +84,26 @@ function SoundUtil:_RemoveLoadedSound(name)
 	self.SoundMap[name] = nil
 end
 
-function SoundUtil:RemoveSound(name)
+function SoundUtil.RemoveSound(self: SoundUtil, name: string)
 	self:_RemoveLoadedSound(name)
 end
 
-function SoundUtil:RemoveSoundId(sound_id)
+function SoundUtil.RemoveSoundId(self: SoundUtil, sound_id: string)
 	local names_to_remove = {}
 
-	for name, registered_sound_id in pairs(self.SoundMap) do
+	for name, registered_sound_id in self.SoundMap do
 		if registered_sound_id == sound_id then
 			table.insert(names_to_remove, name)
 		end
 	end
 
-	for _, name in names_to_remove do
+	for index = 1, #names_to_remove do
+		local name = names_to_remove[index]
 		self:_RemoveLoadedSound(name)
 	end
 end
 
-function SoundUtil:Load(name)
+function SoundUtil.Load(self: SoundUtil, name: string): Sound
 	local sound_instance = Instance.new("Sound")
 	sound_instance.SoundId = self.SoundMap[name]
 	sound_instance.Name = name
@@ -116,7 +125,7 @@ function SoundUtil:Load(name)
 	return sound_instance
 end
 
-function SoundUtil:EnsureLoaded(name)
+function SoundUtil.EnsureLoaded(self: SoundUtil, name: string): Sound
 	if self.Sounds[name] then
 		return self.Sounds[name]
 	end
@@ -124,7 +133,7 @@ function SoundUtil:EnsureLoaded(name)
 	return self:Load(name)
 end
 
-function SoundUtil:Play(name, properties)
+function SoundUtil.Play(self: SoundUtil, name: string, properties: SoundProperties?)
 	local sound = self:EnsureLoaded(name)
 
 	if properties then
@@ -137,7 +146,7 @@ function SoundUtil:Play(name, properties)
 	self.OnPlay:Fire(name, sound)
 end
 
-function SoundUtil:PlayAsync(name, properties)
+function SoundUtil.PlayAsync(self: SoundUtil, name: string, properties: SoundProperties?): PromiseLike
 	local sound = self:EnsureLoaded(name)
 	local sound_keeper = self.SoundKeepers[name]
 
@@ -199,7 +208,7 @@ function SoundUtil:PlayAsync(name, properties)
 	return play_promise
 end
 
-function SoundUtil:Stop(name)
+function SoundUtil.Stop(self: SoundUtil, name: string)
 	local sound = self.Sounds[name]
 	if not sound then
 		return
@@ -213,13 +222,13 @@ function SoundUtil:Stop(name)
 	end
 end
 
-function SoundUtil:StopAll()
-	for name, _ in self.Sounds do
+function SoundUtil.StopAll(self: SoundUtil)
+	for name in self.Sounds do
 		self:Stop(name)
 	end
 end
 
-function SoundUtil:TimePositionAsync(name, target_time)
+function SoundUtil.TimePositionAsync(self: SoundUtil, name: string, target_time: number): PromiseLike
 	local sound = self:EnsureLoaded(name)
 	local sound_keeper = self.SoundKeepers[name]
 
@@ -255,7 +264,7 @@ function SoundUtil:TimePositionAsync(name, target_time)
 	end)
 end
 
-function SoundUtil:PlayPart(part, name, properties)
+function SoundUtil.PlayPart(self: SoundUtil, part: Instance, name: string, properties: SoundProperties?): Sound
 	local sound = self.Keeper:Add(Instance.new("Sound"))
 	sound.SoundId = self.SoundMap[name]
 	sound.Name = name
@@ -283,7 +292,7 @@ function SoundUtil:PlayPart(part, name, properties)
 	return sound
 end
 
-function SoundUtil:PlayCFrame(cframe, name, properties)
+function SoundUtil.PlayCFrame(self: SoundUtil, cframe: CFrame, name: string, properties: SoundProperties?): Sound
 	local part = self.Keeper:Add(Instance.new("Part"))
 	part.Size = Vector3.new(0.2, 0.2, 0.2)
 	part.Anchored = true
@@ -320,7 +329,7 @@ function SoundUtil:PlayCFrame(cframe, name, properties)
 	return sound
 end
 
-function SoundUtil:PlayLocal(player, name, properties)
+function SoundUtil.PlayLocal(self: SoundUtil, player: Player, name: string, properties: SoundProperties?): Sound
 	if not RunService:IsClient() then
 		error("PlayLocal must be called from the client", 2)
 	end
@@ -354,4 +363,4 @@ function SoundUtil:PlayLocal(player, name, properties)
 	return sound
 end
 
-return SoundUtil
+return SoundUtilModule

@@ -13,7 +13,7 @@ const Promise = require("../../../Promise")
 const Keeper = require("../../../Keeper")
 const DataClient = require("./Data/Client")
 const Config = require("./Config")
-local Signal = require("./Signal")
+const Signal = require("./Signal")
 
 const PrintUtil = require("./Utilities/PrintUtil")
 local DataServer = nil
@@ -22,15 +22,17 @@ if RunService:IsServer() then
 	DataServer = require("./Data/Server")
 end
 
-local Player = {}
-Player.__index = Player
+local PlayerModule = {}
 
-Player.Added = Signal.new()
-Player.Removing = Signal.new()
-Player.Loaded = Signal.new()
-Player.Unloading = Signal.new()
-Player.PermissionsChanged = Signal.new()
-Player.DataSaved = Signal.new()
+local PlayerClass = {}
+PlayerClass.__index = PlayerClass
+
+PlayerModule.Added = Signal.new()
+PlayerModule.Removing = Signal.new()
+PlayerModule.Loaded = Signal.new()
+PlayerModule.Unloading = Signal.new()
+PlayerModule.PermissionsChanged = Signal.new()
+PlayerModule.DataSaved = Signal.new()
 
 local function clone_permissions(permissions)
 	local clone = {}
@@ -39,7 +41,7 @@ local function clone_permissions(permissions)
 		return clone
 	end
 
-	for permission, allowed in permissions do
+	for permission, allowed in  permissions do
 		clone[permission] = not not allowed
 	end
 
@@ -55,13 +57,13 @@ local function permissions_equal(left, right)
 		return false
 	end
 
-	for key, value in next, left do
+	for key, value in  left do
 		if right[key] ~= value then
 			return false
 		end
 	end
 
-	for key, value in next, right do
+	for key, value in  right do
 		if left[key] ~= value then
 			return false
 		end
@@ -70,8 +72,8 @@ local function permissions_equal(left, right)
 	return true
 end
 
-function Player.new(instance: Player)
-	local self = setmetatable({}, Player)
+function PlayerModule.new(instance: Player)
+	local self = setmetatable({}, PlayerClass)
 
 	self.Keeper = Keeper.new()
 	self.Keeper:AttachToInstance(instance)
@@ -102,55 +104,57 @@ function Player.new(instance: Player)
 		self:Destroy()
 	end)
 
-	Player.Loaded:Fire(self)
+	PlayerModule.Loaded:Fire(self)
 
 	return self
 end
 
-function Player:_ApplyState(state)
+export type PlayerObject = typeof(PlayerModule.new(...))
+
+function PlayerClass._ApplyState(self: PlayerObject, state)
 	local previous_permissions = self.Permissions
 	self.Data = state
 	self.Permissions = clone_permissions(type(state) == "table" and state.Permissions or nil)
 
 	if not permissions_equal(previous_permissions, self.Permissions) then
-		Player.PermissionsChanged:Fire(self, previous_permissions, self.Permissions)
+		PlayerModule.PermissionsChanged:Fire(self, previous_permissions, self.Permissions)
 	end
 
 	return state
 end
 
-function Player:_SyncState(state)
+function PlayerClass._SyncState(self: PlayerObject, state)
 	self.Data = state
 	self.Permissions = clone_permissions(type(state) == "table" and state.Permissions or nil)
 	return state
 end
 
-function Player:GetUserId()
+function PlayerClass.GetUserId(self: PlayerObject)
 	return self.Instance.UserId
 end
 
-function Player:GetName()
+function PlayerClass.GetName(self: PlayerObject)
 	return self.Instance.Name
 end
 
-function Player:GetDisplayName()
+function PlayerClass.GetDisplayName(self: PlayerObject)
 	return self.Instance.DisplayName
 end
 
-function Player:BindCharacter(character: Model, entity)
+function PlayerClass.BindCharacter(self: PlayerObject, character: Model, entity)
 	self.Character = character
 	self.Entity = entity
 	return character
 end
 
-function Player:UnbindCharacter(character)
+function PlayerClass.UnbindCharacter(self: PlayerObject, character)
 	if character == nil or self.Character == character then
 		self.Character = nil
 		self.Entity = nil
 	end
 end
 
-function Player:GetData()
+function PlayerClass.GetData(self: PlayerObject)
 	if RunService:IsServer() then
 		return self:_SyncState(DataServer:GetState(self.Instance))
 	end
@@ -162,7 +166,7 @@ function Player:GetData()
 	return self:_SyncState(DataClient:GetState())
 end
 
-function Player:SetData(next_state)
+function PlayerClass.SetData(self: PlayerObject, next_state)
 	if not RunService:IsServer() then
 		PrintUtil:Error("Cannot call ResetData from the client")
 		return
@@ -170,11 +174,11 @@ function Player:SetData(next_state)
 
 	local state = DataServer:SetState(self.Instance, next_state)
 	self:_ApplyState(state)
-	Player.DataSaved:Fire(self, state)
+	PlayerModule.DataSaved:Fire(self, state)
 	return state
 end
 
-function Player:UpdateData(updater)
+function PlayerClass.UpdateData(self: PlayerObject, updater)
 	if not RunService:IsServer() then
 		PrintUtil:Error("Cannot call ResetData from the client")
 		return
@@ -182,11 +186,11 @@ function Player:UpdateData(updater)
 
 	local state = DataServer:UpdateState(self.Instance, updater)
 	self:_ApplyState(state)
-	Player.DataSaved:Fire(self, state)
+	PlayerModule.DataSaved:Fire(self, state)
 	return state
 end
 
-function Player:Load()
+function PlayerClass.Load(self: PlayerObject)
 	if not RunService:IsServer() then
 		return Promise.resolve("Cannot call Load from the client")
 	end
@@ -196,7 +200,7 @@ function Player:Load()
 	end)
 end
 
-function Player:Save()
+function PlayerClass.Save(self: PlayerObject)
 	if not RunService:IsServer() then
 		return Promise.reject("Cannot call Save from the client")
 	end
@@ -210,7 +214,7 @@ function Player:Save()
 	end)
 end
 
-function Player:ResetData()
+function PlayerClass.ResetData(self: PlayerObject)
 	if not RunService:IsServer() then
 		PrintUtil:Error("Cannot call ResetData from the client")
 		return nil
@@ -218,15 +222,15 @@ function Player:ResetData()
 
 	local state = DataServer:ResetState(self.Instance)
 	self:_ApplyState(state)
-	Player.DataSaved:Fire(self, state)
+	PlayerModule.DataSaved:Fire(self, state)
 	return state
 end
 
-function Player:HasPermission(permission)
+function PlayerClass.HasPermission(self: PlayerObject, permission)
 	return self.Permissions[permission] == true
 end
 
-function Player:SetPermission(permission, allowed)
+function PlayerClass.SetPermission(self: PlayerObject, permission, allowed)
 	if not RunService:IsServer() then
 		PrintUtil:Error("Cannot call SetPermission from the client")
 		return
@@ -240,21 +244,21 @@ function Player:SetPermission(permission, allowed)
 	end)
 end
 
-function Player:GrantPermission(permission)
+function PlayerClass.GrantPermission(self: PlayerObject, permission)
 	return self:SetPermission(permission, true)
 end
 
-function Player:RevokePermission(permission)
+function PlayerClass.RevokePermission(self: PlayerObject, permission)
 	return self:SetPermission(permission, false)
 end
 
-function Player:Destroy()
+function PlayerClass.Destroy(self: PlayerObject)
 	if self._Destroyed then
 		return
 	end
 
 	self._Destroyed = true
-	Player.Unloading:Fire(self)
+	PlayerModule.Unloading:Fire(self)
 	self.Character = nil
 	self.Entity = nil
 	self.Data = nil
@@ -263,51 +267,14 @@ function Player:Destroy()
 end
 
 Players.PlayerAdded:Connect(function(player)
-	Player.Added:Fire(player)
+	PlayerModule.Added:Fire(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-	Player.Removing:Fire(player)
+	PlayerModule.Removing:Fire(player)
 end)
 
 export type PermissionMap = { [string]: boolean }
 export type PlayerState = Config.PlayerState
 
-export type PlayerObject = {
-	Keeper: any,
-	Instance: Player,
-	Character: Model?,
-	Entity: any,
-	Data: PlayerState,
-	Permissions: PermissionMap,
-	_Destroyed: boolean,
-
-	GetUserId: (self: PlayerObject) -> number,
-	GetName: (self: PlayerObject) -> string,
-	GetDisplayName: (self: PlayerObject) -> string,
-	BindCharacter: (self: PlayerObject, character: Model, entity: any) -> Model,
-	UnbindCharacter: (self: PlayerObject, character: Model?) -> (),
-	GetData: (self: PlayerObject) -> PlayerState,
-	SetData: (self: PlayerObject, next_state: PlayerState) -> PlayerState,
-	UpdateData: (self: PlayerObject, updater: (PlayerState) -> PlayerState) -> PlayerState,
-	Load: (self: PlayerObject) -> any,
-	Save: (self: PlayerObject) -> any,
-	ResetData: (self: PlayerObject) -> PlayerState,
-	HasPermission: (self: PlayerObject, permission: string) -> boolean,
-	SetPermission: (self: PlayerObject, permission: string, allowed: boolean) -> any,
-	GrantPermission: (self: PlayerObject, permission: string) -> any,
-	RevokePermission: (self: PlayerObject, permission: string) -> any,
-	Destroy: (self: PlayerObject) -> (),
-}
-
-type PlayerModule = {
-	new: (instance: Player) -> PlayerObject,
-	Added: Signal.Signal<Player>,
-	Removing: Signal.Signal<Player>,
-	Loaded: Signal.Signal<PlayerObject>,
-	Unloading: Signal.Signal<PlayerObject>,
-	PermissionsChanged: Signal.Signal<PlayerObject, PermissionMap, PermissionMap>,
-	DataSaved: Signal.Signal<PlayerObject, PlayerState>,
-}
-
-return (Player :: any) :: PlayerModule
+return PlayerModule

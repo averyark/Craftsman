@@ -40,7 +40,7 @@ local function deep_clone(value)
 
 	local clone = {}
 
-	for key, child in next, value do
+	for key, child in  value do
 		clone[deep_clone(key)] = deep_clone(child)
 	end
 
@@ -64,7 +64,7 @@ local function validate_template(template, value)
 		return false
 	end
 
-	for key, template_value in next, template do
+	for key, template_value in  template do
 		local candidate_value = value[key]
 
 		if candidate_value == nil then
@@ -243,7 +243,7 @@ Data.Loaded = {
 	Connect = function(self, fn)
 		local conn = RealLoadedSignal:Connect(fn)
 
-		for player, record in next, PlayerRecords do
+		for player, record in  PlayerRecords do
 			if record.Loaded then
 				task.spawn(fn, player, record.Producer:getState())
 			end
@@ -252,7 +252,7 @@ Data.Loaded = {
 		return conn
 	end,
 	Once = function(self, fn)
-		for player, record in next, PlayerRecords do
+		for player, record in  PlayerRecords do
 			if record.Loaded then
 				task.spawn(fn, player, record.Producer:getState())
 				return {
@@ -452,7 +452,7 @@ function Data:Shutdown()
 	end
 
 	local players = {}
-	for player in next, PlayerRecords do
+	for player in  PlayerRecords do
 		players[#players + 1] = player
 	end
 

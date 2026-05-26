@@ -97,7 +97,7 @@ end
 
 local function clone_map(source: { [any]: any }): { [any]: any }
 	local output = {}
-	for key, value in next, source do
+	for key, value in  source do
 		output[key] = value
 	end
 	return output

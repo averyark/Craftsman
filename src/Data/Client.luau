@@ -6,7 +6,6 @@
     Created     > 21/05/2026
 --]]
 
-const ReplicatedStorage = game:GetService("ReplicatedStorage")
 const RunService = game:GetService("RunService")
 const Players = game:GetService("Players")
 
@@ -21,12 +20,8 @@ export type PlayerState = Config.PlayerState
 local Client = {}
 
 local DataConfig = Config.DATA or {}
-local BRIDGE_FOLDER_NAME = DataConfig.BRIDGE_FOLDER_NAME or "CraftsmanDataBridge"
-local STATE_EVENT_NAME = DataConfig.STATE_EVENT_NAME or "StateUpdated"
-local REQUEST_FUNCTION_NAME = DataConfig.REQUEST_FUNCTION_NAME or "RequestState"
 
 local DefaultState: PlayerState = nil :: any
-local BridgeFolder = nil
 local StateProducer = nil
 
 local IsLoaded = false
@@ -67,15 +62,6 @@ local function ensure_producer()
 	})
 
 	return StateProducer
-end
-
-local function ensure_bridge()
-	if BridgeFolder then
-		return BridgeFolder
-	end
-
-	BridgeFolder = ReplicatedStorage:WaitForChild(BRIDGE_FOLDER_NAME)
-	return BridgeFolder
 end
 
 local function sync_state(next_state)
@@ -130,8 +116,6 @@ function Client:Init()
 	if not RunService:IsClient() or DataConfig.ENABLED == false or DataConfig.AUTO_START_CLIENT == false then
 		return
 	end
-
-	ensure_bridge()
 
 	Network.packets.StateUpdated.listen(function(next_state)
 		if type(next_state) == "table" then
@@ -210,14 +194,6 @@ function Client:ObserveWhile(...)
 	return ensure_producer():observeWhile(...)
 end
 
-function Client:WaitForBridge()
-	return ensure_bridge()
-end
-
-function Client:GetBridge()
-	return ensure_bridge()
-end
-
 export type ClientModule = {
 	Loaded: Signal.Signal<Player, PlayerState>,
 	Saved: Signal.Signal<Player, PlayerState>,
@@ -231,8 +207,6 @@ export type ClientModule = {
 	Subscribe: (self: ClientModule, listener: (PlayerState, PlayerState) -> ()) -> any,
 	Observe: (self: ClientModule, selector: (PlayerState) -> any, listener: (any, any) -> ()) -> any,
 	ObserveWhile: (self: ClientModule, selector: (PlayerState) -> boolean, listener: (boolean) -> ()) -> any,
-	WaitForBridge: (self: ClientModule) -> Folder,
-	GetBridge: (self: ClientModule) -> Folder,
 }
 
 return (Client :: any) :: ClientModule

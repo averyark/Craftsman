@@ -16,6 +16,7 @@ const MathUtil = require("@self/Utilities/MathUtil")
 const PrintUtil = require("@self/Utilities/PrintUtil")
 const SoundUtil = require("@self/Utilities/SoundUtil")
 const TableUti = require("@self/Utilities/TableUtil")
+const Tag = require("@self/Tag")
 
 if RunService:IsServer() then
 	DataServer = require("@self/Data/Server")
@@ -25,57 +26,58 @@ end
 const ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Craftsman = {
-	Component = Component,
-	Player = Player,
-	Entity = Entity,
-	Queue = Queue,
+	Component = Component, -- Module Loader
+	Player = Player, -- Player Management
+	Entity = Entity, -- Character & Entity Management
+	Queue = Queue, -- Task Queue System
 
-	DataServer = DataServer,
-	DataClient = DataClient,
-	MarketServer = MarketServer,
-	MarketClient = MarketClient,
+	DataServer = DataServer, -- Server Data Manipulation
+	DataClient = DataClient, -- Client Data Access
+	MarketServer = MarketServer, -- Server Marketplace Logic
+	MarketClient = MarketClient, -- Client Marketplace Access
 
-	InputUtil = InputUtil,
-	PrintUtil = PrintUtil,
-	TableUtil = TableUti,
+	InputUtil = InputUtil, -- User Input Handling
+	PrintUtil = PrintUtil, -- Debugging and Printing
+	TableUtil = TableUti, -- Table Manipulation Utilities
 
-	AnimationUtil = AnimationUtil,
-	SoundUtil = SoundUtil,
+	AnimationUtil = AnimationUtil, -- Animation Handling
+	SoundUtil = SoundUtil, -- Sound Handling
+	Tag = Tag, -- Instance Tag Utility
 
-	MathUtil = MathUtil,
-	StringUtil = StringUtil,
+	MathUtil = MathUtil, -- Math Utilities
+	StringUtil = StringUtil, -- String Utilities
 
-	Config = Config,
+	Config = Config, -- Configuration Management
 }
 
 -- Automatically load custom configuration if it exists
-local customConfigInstance = ReplicatedStorage:FindFirstChild("CraftsmanConfig")
+local custom_config_instance = ReplicatedStorage:FindFirstChild("CraftsmanConfig")
 	or ReplicatedStorage:FindFirstChild("CraftmansConfig")
 
-if customConfigInstance and customConfigInstance:IsA("ModuleScript") then
-	local success, customConfig = pcall(require, customConfigInstance)
-	if success and type(customConfig) == "table" then
+if custom_config_instance and custom_config_instance:IsA("ModuleScript") then
+	local success, custom_config = pcall(require, custom_config_instance)
+	if success and type(custom_config) == "table" then
 		-- Apply configuration
 		if
-			customConfig.TEMPLATE ~= nil
-			or customConfig.KEYS ~= nil
-			or customConfig.PRODUCTS ~= nil
-			or customConfig.GAMEPASSES ~= nil
+			custom_config.TEMPLATE ~= nil
+			or custom_config.KEYS ~= nil
+			or custom_config.PRODUCTS ~= nil
+			or custom_config.GAMEPASSES ~= nil
 		then
-			if customConfig.TEMPLATE ~= nil then
-				Config.DATA.TEMPLATE = customConfig.TEMPLATE
+			if custom_config.TEMPLATE ~= nil then
+				Config.DATA.TEMPLATE = custom_config.TEMPLATE
 			end
-			if customConfig.KEYS ~= nil then
-				Config.MARKET.KEYS = customConfig.KEYS
+			if custom_config.KEYS ~= nil then
+				Config.MARKET.KEYS = custom_config.KEYS
 			end
-			if customConfig.PRODUCTS ~= nil then
-				Config.MARKET.PRODUCTS = customConfig.PRODUCTS
+			if custom_config.PRODUCTS ~= nil then
+				Config.MARKET.PRODUCTS = custom_config.PRODUCTS
 			end
-			if customConfig.GAMEPASSES ~= nil then
-				Config.MARKET.GAMEPASSES = customConfig.GAMEPASSES
+			if custom_config.GAMEPASSES ~= nil then
+				Config.MARKET.GAMEPASSES = custom_config.GAMEPASSES
 			end
-		elseif customConfig.DATA ~= nil or customConfig.MARKET ~= nil or customConfig.MODULE_LOAD_ORDER ~= nil then
-			Config:Edit(customConfig)
+		elseif custom_config.DATA ~= nil or custom_config.MARKET ~= nil or custom_config.MODULE_LOAD_ORDER ~= nil then
+			Config:Edit(custom_config)
 		end
 	end
 end

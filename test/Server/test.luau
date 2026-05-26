@@ -44,7 +44,7 @@ test.Start = function()
 		while true do
 			task.wait(10)
 
-			for player in next, LoadedPlayers do
+			for player in LoadedPlayers do
 				local base_coins = math.random(1, 10)
 
 				-- Apply active multipliers from the gamepass cache natively

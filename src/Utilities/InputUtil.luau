@@ -92,7 +92,7 @@ local function process_input(input_object, is_began)
 
 	local target_key = (key_code == Enum.KeyCode.Unknown) and user_input_type or key_code
 
-	for action_name, key_array in next, ActionBindings do
+	for action_name, key_array in ActionBindings do
 		local is_match = false
 
 		for i = 1, #key_array do

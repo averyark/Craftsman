@@ -148,7 +148,7 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 			row_list[#row_list + 1] = r
 		end
 	else
-		for k, v in next, rows do
+		for k, v in rows do
 			local is_row_obj = false
 			if type(v) == "table" and getmetatable(v) == nil then
 				for j = 2, #headers do
@@ -299,7 +299,7 @@ function PrintUtil:PrintObject(object)
 	local columns = { "Field", "Value" }
 	local rows = {}
 
-	for k, v in next, object do
+	for k, v in object do
 		if type(v) ~= "function" then
 			table.insert(rows, { k, v })
 		end

@@ -77,11 +77,11 @@ function Component:LoadModulesAsync(modules: Instance)
 				return
 			end
 
-			-- No Yield
-			if module_contents.PreStart and type(module_contents.PreStart) == "function" then
-				Promise.try(module_contents.PreStart, module_contents):catch(function(err)
-					PrintUtil:Warn(`Error in PreStart of module {module_name}:`, err.Error)
-				end)
+			if module_contents.Init and type(module_contents.Init) == "function" then
+				local init_ok, init_err = pcall(module_contents.Init, module_contents)
+				if not init_ok then
+					PrintUtil:Warn(`Error in Init of module {module_name}:`, init_err)
+				end
 			end
 
 			resolve(module_contents)
