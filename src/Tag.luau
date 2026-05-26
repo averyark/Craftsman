@@ -6,7 +6,7 @@
     Created     > 26/05/2026
 --]]
 
-const Signal = require("@self/Signal")
+const Signal = require("./Signal")
 
 local TAG_PREFIX = "__TAG_"
 
@@ -514,7 +514,7 @@ function TagClass.Destroy(self: Tag)
 	self.OnInstanceTagged:Destroy()
 end
 
-TagModule.new =new
+TagModule.new = new
 
 function TagModule.Get(identifier: string): Tag
 	if Tags[identifier] then
