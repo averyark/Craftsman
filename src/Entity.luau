@@ -32,6 +32,7 @@ local Entity = {
 	Destroyed = Signal.new() :: Signal.Signal<Entity>,
 	HealthChanged = Signal.new() :: Signal.Signal<Entity, number>,
 }
+local EntityObjects = {}
 
 local EntityClass = {}
 EntityClass.__index = EntityClass
@@ -44,8 +45,13 @@ function Entity.new(instance: Instance, player: Player?)
 
 	self.Instance = instance
 	local resolved_player = player or Players:GetPlayerFromCharacter(instance)
-	self.PlayerObject = nil
+	self.PlayerObject = if resolved_player then Player.Get(resolved_player) else nil
 	self.Player = resolved_player
+	EntityObjects[instance] = self
+
+	if self.PlayerObject and type((self.PlayerObject :: any).BindCharacter) == "function" then
+		(self.PlayerObject :: any):BindCharacter(instance, self)
+	end
 
 	self.HumanoidRootPart = instance:WaitForChild("HumanoidRootPart") :: BasePart
 	self.Humanoid = instance:WaitForChild("Humanoid") :: Humanoid
@@ -91,6 +97,19 @@ function Entity.new(instance: Instance, player: Player?)
 end
 
 export type Entity = typeof(Entity.new(...))
+
+function Entity.Get(instance: Instance): Entity?
+	if instance:IsA("Player") then
+		local character = (instance :: Player).Character
+		if character == nil then
+			return nil
+		end
+
+		return EntityObjects[character]
+	end
+
+	return EntityObjects[instance]
+end
 
 function EntityClass.IsAlive(self: Entity)
 	return not self._Destroyed and self.Instance.Parent ~= nil and self.Humanoid.Health > 0
@@ -147,6 +166,7 @@ function EntityClass.Destroy(self: Entity)
 
 	self._Destroyed = true
 	Entity.Destroyed:Fire(self)
+	EntityObjects[self.Instance] = nil
 
 	if self.PlayerObject and type((self.PlayerObject :: any).UnbindCharacter) == "function" then
 		(self.PlayerObject :: any):UnbindCharacter(self.Instance)

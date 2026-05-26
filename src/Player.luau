@@ -23,6 +23,7 @@ if RunService:IsServer() then
 end
 
 local PlayerModule = {}
+local PlayerObjects = {}
 
 local PlayerClass = {}
 PlayerClass.__index = PlayerClass
@@ -41,7 +42,7 @@ local function clone_permissions(permissions)
 		return clone
 	end
 
-	for permission, allowed in  permissions do
+	for permission, allowed in permissions do
 		clone[permission] = not not allowed
 	end
 
@@ -57,13 +58,13 @@ local function permissions_equal(left, right)
 		return false
 	end
 
-	for key, value in  left do
+	for key, value in left do
 		if right[key] ~= value then
 			return false
 		end
 	end
 
-	for key, value in  right do
+	for key, value in right do
 		if left[key] ~= value then
 			return false
 		end
@@ -84,6 +85,7 @@ function PlayerModule.new(instance: Player)
 	self.Data = nil
 	self.Permissions = {}
 	self._Destroyed = false
+	PlayerObjects[instance] = self
 
 	self.Keeper:Connect(instance.CharacterAdded, function(character)
 		self.Character = character
@@ -110,6 +112,10 @@ function PlayerModule.new(instance: Player)
 end
 
 export type PlayerObject = typeof(PlayerModule.new(...))
+
+function PlayerModule.Get(instance: Player): PlayerObject?
+	return PlayerObjects[instance]
+end
 
 function PlayerClass._ApplyState(self: PlayerObject, state)
 	local previous_permissions = self.Permissions
@@ -263,6 +269,7 @@ function PlayerClass.Destroy(self: PlayerObject)
 	self.Entity = nil
 	self.Data = nil
 	self.Permissions = {}
+	PlayerObjects[self.Instance] = nil
 	self.Keeper:Destroy()
 end
 
