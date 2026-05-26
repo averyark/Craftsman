@@ -531,23 +531,4 @@ function Data:Start()
 	end
 end
 
-export type DataModule = {
-	Loaded: Signal.Signal<Player, PlayerState>,
-	Saved: Signal.Signal<Player, PlayerState>,
-
-	Init: (self: DataModule) -> (),
-	GetPlayerRecord: (self: DataModule, player: Player) -> any,
-	GetProducer: (self: DataModule, player: Player) -> any,
-	GetState: (self: DataModule, player: Player) -> PlayerState,
-	SetState: (self: DataModule, player: Player, next_state: PlayerState) -> PlayerState,
-	UpdateState: (self: DataModule, player: Player, updater: (PlayerState) -> PlayerState) -> PlayerState,
-	ResetState: (self: DataModule, player: Player) -> PlayerState,
-	LoadPlayer: (self: DataModule, player: Player) -> any,
-	SavePlayer: (self: DataModule, player: Player) -> any,
-	ClosePlayer: (self: DataModule, player: Player) -> any,
-	RemovePlayer: (self: DataModule, player: Player) -> any,
-	Shutdown: (self: DataModule) -> (),
-	Start: (self: DataModule) -> (),
-}
-
-return (Data :: any) :: DataModule
+return Data
