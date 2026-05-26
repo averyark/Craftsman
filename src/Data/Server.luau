@@ -113,7 +113,7 @@ local function reconcile_state(state)
 	return normalize_state(mutable_state)
 end
 
-local function make_producer(initial_state)
+local function make_producer(initial_state: PlayerState)
 	return Reflex.createProducer(initial_state, {
 		SetState = function(state, next_state)
 			if next_state == state then
