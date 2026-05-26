@@ -179,8 +179,6 @@ local function get_record(player: Player): Record
 	return record
 end
 
-get_record(Players.LocalPlayer).Producer:subscribe()
-
 local function sync_client(player, state)
 	if player.Parent then
 		Network.packets.StateUpdated.sendTo(state, player)
