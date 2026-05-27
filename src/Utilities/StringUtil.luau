@@ -90,6 +90,11 @@ function StringUtil.Pluralize(text, count, custom_suffix)
 	return text .. (custom_suffix or "s")
 end
 
+function StringUtil.FormatDecimal(value: number, decimal_places: number?): string
+	local precision = decimal_places or 2
+	return string.format(`%.{precision}f`, value)
+end
+
 function StringUtil.EscapeRichText(text)
 	return string.gsub(text, "[&<>\"']", RICH_TEXT_ESCAPES)
 end

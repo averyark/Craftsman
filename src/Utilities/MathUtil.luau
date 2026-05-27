@@ -149,7 +149,7 @@ function MathUtil.FormatTime(total_seconds)
 end
 
 function MathUtil.RoundTo(value, step)
-	return math.floor((value / step) + 0.5) * step
+	return math.round((value / step)) * step
 end
 
 function MathUtil.Wrap(value, min, max)
