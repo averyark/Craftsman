@@ -19,11 +19,27 @@ SoundUtil.__index = SoundUtil
 
 type SoundMap = { [string]: string }
 type SoundProperties = { [string]: any }
+type SoundUtilOptions = {
+	NoCache: boolean?,
+}
 type PromiseLike = typeof(Promise.new(function() end))
 
-function SoundUtilModule.new(target_instance: Instance, sound_map: SoundMap?)
+local SoundUtilCache = {}
+
+function SoundUtilModule.new(target_instance: Instance, sound_map: SoundMap?, options: SoundUtilOptions?)
+	if not options or not options.NoCache then
+		local cached_sound_util = SoundUtilCache[target_instance]
+		if cached_sound_util then
+			return cached_sound_util
+		end
+	end
+
 	local self = setmetatable({}, SoundUtil)
 	self.Keeper = Keeper.new()
+	self.Keeper:AttachToInstance(target_instance)
+	self.Keeper:Add(function()
+		SoundUtilCache[target_instance] = nil
+	end)
 
 	self.TargetInstance = target_instance
 	self.SoundMap = sound_map or {}
@@ -33,6 +49,10 @@ function SoundUtilModule.new(target_instance: Instance, sound_map: SoundMap?)
 
 	self.OnPlay = self.Keeper:Construct(Signal)
 	self.OnStop = self.Keeper:Construct(Signal)
+
+	if not options or not options.NoCache then
+		SoundUtilCache[target_instance] = self
+	end
 
 	return self
 end
