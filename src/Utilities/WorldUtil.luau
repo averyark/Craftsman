@@ -77,7 +77,7 @@ function WorldUtil:RayBelow(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-} & CastOptions)
+} & CastOptions): RaycastResult?
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -93,7 +93,7 @@ function WorldUtil:IsGrounded(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-} & CastOptions)
+} & CastOptions): boolean
 	local raycast_result = self:RayBelow(param)
 
 	return raycast_result ~= nil
@@ -105,7 +105,7 @@ function WorldUtil:RayFront(param: {
 	RayParamsId: string,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
-} & CastOptions)
+} & CastOptions): RaycastResult?
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -128,7 +128,7 @@ function WorldUtil:RaySide(param: {
 	RayParamsId: string,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
-} & CastOptions)
+} & CastOptions): RaycastResult?
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -151,7 +151,7 @@ function WorldUtil:RayUp(param: {
 	RayParamsId: string,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
-} & CastOptions)
+} & CastOptions): RaycastResult?
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -173,7 +173,7 @@ function WorldUtil:GetGroundPosition(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-} & CastOptions)
+} & CastOptions): Vector3?
 	local raycast_result = self:RayBelow(param)
 
 	if not raycast_result then
@@ -188,7 +188,7 @@ function WorldUtil:GetGroundNormal(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-} & CastOptions)
+} & CastOptions): Vector3?
 	local raycast_result = self:RayBelow(param)
 
 	if not raycast_result then
@@ -203,7 +203,7 @@ function WorldUtil:GetPartsInRadius(param: {
 	Radius: number,
 	OverlapParamsId: string,
 	OverlapParams: OverlapParams?,
-})
+}): { BasePart }
 	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
 
 	return workspace:GetPartBoundsInRadius(param.Center, param.Radius, overlap_param)
@@ -214,7 +214,7 @@ function WorldUtil:GetPartsInBox(param: {
 	Size: Vector3,
 	OverlapParamsId: string,
 	OverlapParams: OverlapParams?,
-})
+}): { BasePart }
 	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
 
 	return workspace:GetPartBoundsInBox(param.CFrame, param.Size, overlap_param)
@@ -224,7 +224,7 @@ function WorldUtil:GetPartsInPart(param: {
 	Part: BasePart,
 	OverlapParamsId: string,
 	OverlapParams: OverlapParams?,
-})
+}): { BasePart }
 	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
 
 	return workspace:GetPartsInPart(param.Part, overlap_param)
@@ -233,7 +233,7 @@ end
 function WorldUtil:GetNearest(param: {
 	Origin: Vector3,
 	Instances: { BasePart | Model },
-})
+}): (BasePart | Model?, number)
 	local nearest_part = nil
 	local nearest_distance = math.huge
 
@@ -264,7 +264,7 @@ function WorldUtil:GetNearestPart(param: {
 	return self:GetNearest(param)
 end
 
-function WorldUtil:GetNearestPoint(origin: Vector3, points: { Vector3 })
+function WorldUtil:GetNearestPoint(origin: Vector3, points: { Vector3 }): (Vector3?, number)
 	local nearest_point = nil
 	local nearest_distance = math.huge
 
@@ -279,18 +279,18 @@ function WorldUtil:GetNearestPoint(origin: Vector3, points: { Vector3 })
 	return nearest_point, nearest_distance
 end
 
-function WorldUtil:WorldToScreen(world_position: Vector3, camera: Camera?)
+function WorldUtil:WorldToScreen(world_position: Vector3, camera: Camera?): (Vector2?, boolean)
 	local active_camera = camera or workspace.CurrentCamera
 
 	if not active_camera then
-		return nil
+		return nil, false
 	end
 
 	local screen_position, on_screen = active_camera:WorldToViewportPoint(world_position)
 	return Vector2.new(screen_position.X, screen_position.Y), on_screen
 end
 
-function WorldUtil:ScreenToWorld(screen_position: Vector2, depth: number, camera: Camera?)
+function WorldUtil:ScreenToWorld(screen_position: Vector2, depth: number, camera: Camera?): Vector3?
 	local active_camera = camera or workspace.CurrentCamera
 
 	if not active_camera then
