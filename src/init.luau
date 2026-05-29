@@ -28,6 +28,7 @@ const ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Machine = require("@self/StateMachine/Machine")
 
 local State = require("@self/StateMachine/State")
+const WorldUtil = require("@self/Utilities/WorldUtil")
 
 local Craftsman = {
 	Component = Component, -- Module Loader
@@ -45,6 +46,7 @@ local Craftsman = {
 	InputUtil = InputUtil, -- User Input Handling
 	PrintUtil = PrintUtil, -- Debugging and Printing
 	TableUtil = TableUti, -- Table Manipulation Utilities
+	WorldUtil = WorldUtil, -- World and Instance Utilities
 
 	AnimationUtil = AnimationUtil, -- Animation Handling
 	SoundUtil = SoundUtil, -- Sound Handling

@@ -8,7 +8,41 @@
 
 const PrintUtil = require("./PrintUtil")
 
-const below = -Vector3.yAxis
+const Below = -Vector3.yAxis
+
+type CastMode = "Raycast" | "Block" | "Sphere"
+
+type CastOptions = {
+	Mode: CastMode?,
+	BlockSize: Vector3?,
+	SphereRadius: number?,
+}
+
+local function get_cast_result(
+	origin: Vector3,
+	direction: Vector3,
+	ray_param: RaycastParams,
+	options: CastOptions?,
+	cframe: CFrame?
+)
+	local cast_options = (options or {}) :: CastOptions
+	local cast_mode = cast_options.Mode
+
+	if cast_mode == "Block" then
+		return workspace:Blockcast(
+			cframe or CFrame.new(origin),
+			cast_options.BlockSize or Vector3.one,
+			direction,
+			ray_param
+		)
+	end
+
+	if cast_mode == "Sphere" then
+		return workspace:Spherecast(origin, cast_options.SphereRadius or 1, direction, ray_param)
+	end
+
+	return workspace:Raycast(origin, direction, ray_param)
+end
 
 local WorldUtil = {}
 WorldUtil.RayParams = {}
@@ -43,7 +77,7 @@ function WorldUtil:RayBelow(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-})
+} & CastOptions)
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -51,9 +85,7 @@ function WorldUtil:RayBelow(param: {
 		return
 	end
 
-	local raycast_result = workspace:Raycast(param.Position, below * param.Distance, ray_param)
-
-	return raycast_result
+	return get_cast_result(param.Position, Below * param.Distance, ray_param, param, CFrame.new(param.Position))
 end
 
 function WorldUtil:IsGrounded(param: {
@@ -61,7 +93,7 @@ function WorldUtil:IsGrounded(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-})
+} & CastOptions)
 	local raycast_result = self:RayBelow(param)
 
 	return raycast_result ~= nil
@@ -73,7 +105,7 @@ function WorldUtil:RayFront(param: {
 	RayParamsId: string,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
-})
+} & CastOptions)
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -81,13 +113,13 @@ function WorldUtil:RayFront(param: {
 		return
 	end
 
-	local raycast_result = workspace:Raycast(
+	return get_cast_result(
 		param.CFrame.Position,
 		param.CFrame.LookVector * param.Distance + (param.Direction or Vector3.zero),
-		ray_param
+		ray_param,
+		param,
+		param.CFrame
 	)
-
-	return raycast_result
 end
 
 function WorldUtil:RaySide(param: {
@@ -96,7 +128,7 @@ function WorldUtil:RaySide(param: {
 	RayParamsId: string,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
-})
+} & CastOptions)
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -104,13 +136,13 @@ function WorldUtil:RaySide(param: {
 		return
 	end
 
-	local raycast_result = workspace:Raycast(
+	return get_cast_result(
 		param.CFrame.Position,
 		param.CFrame.RightVector * param.Distance + (param.Direction or Vector3.zero),
-		ray_param
+		ray_param,
+		param,
+		param.CFrame
 	)
-
-	return raycast_result
 end
 
 function WorldUtil:RayUp(param: {
@@ -119,7 +151,7 @@ function WorldUtil:RayUp(param: {
 	RayParamsId: string,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
-})
+} & CastOptions)
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
@@ -127,13 +159,13 @@ function WorldUtil:RayUp(param: {
 		return
 	end
 
-	local raycast_result = workspace:Raycast(
+	return get_cast_result(
 		param.CFrame.Position,
 		param.CFrame.UpVector * param.Distance + (param.Direction or Vector3.zero),
-		ray_param
+		ray_param,
+		param,
+		param.CFrame
 	)
-
-	return raycast_result
 end
 
 function WorldUtil:GetGroundPosition(param: {
@@ -141,7 +173,7 @@ function WorldUtil:GetGroundPosition(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-})
+} & CastOptions)
 	local raycast_result = self:RayBelow(param)
 
 	if not raycast_result then
@@ -156,7 +188,7 @@ function WorldUtil:GetGroundNormal(param: {
 	Distance: number,
 	RayParamsId: string,
 	RayParams: RaycastParams?,
-})
+} & CastOptions)
 	local raycast_result = self:RayBelow(param)
 
 	if not raycast_result then
