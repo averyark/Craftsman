@@ -93,8 +93,8 @@ function test:Start()
 
 		local a1 = Craftsman.AnimationUtil.new(animator)
 
-		a1:AddAnimationId("Run", "rbxassetid://12345")
-		assert(a1.AnimationMap["Run"] == "rbxassetid://12345", "AnimationId should be mapped")
+		a1:AddAnimationId("Run", "rbxassetid://91539600632847")
+		assert(a1.AnimationMap["Run"] == "rbxassetid://91539600632847", "AnimationId should be mapped")
 
 		a1:RemoveAnimation("Run")
 		assert(a1.AnimationMap["Run"] == nil, "AnimationMap entry should be nil after removal")

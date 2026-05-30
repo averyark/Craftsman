@@ -14,6 +14,7 @@ const RunService = game:GetService("RunService")
 const DocumentService = require("../../../../DocumentService")
 const Promise = require("../../../../Promise")
 const Reflex = require("../../../../Reflex")
+const GreenTea = require("../../../../gt")
 local Signal = require("../Signal")
 
 const Config = require(".././Config") -- Your default data dictionary
@@ -32,6 +33,7 @@ local _REQUEST_FUNCTION_NAME = DataConfig.REQUEST_FUNCTION_NAME or "RequestState
 local DefaultState: PlayerState = nil :: any
 local DocumentStore = (nil :: any) :: typeof(DocumentService.DocumentStore.new(...))
 local BridgeFolder = nil
+local Schema = nil
 
 local function deep_clone(value)
 	if type(value) ~= "table" then
@@ -84,6 +86,24 @@ local function validate_template(template, value)
 	return true
 end
 
+local function validate_state(value: PlayerState): (PlayerState?, string?)
+	if Schema then
+		local ok, cause = Schema:matches(value)
+		if not ok then
+			return nil, tostring(cause)
+		end
+		-- :assert() casts the value to the schema's declared type.
+		return Schema:assert(value) :: PlayerState
+	end
+
+	-- Fallback: structural template-diff check.
+	if not validate_template(DataConfig.TEMPLATE, value) then
+		return nil, "value does not match data template"
+	end
+
+	return value
+end
+
 local function create_bridge()
 	if not RunService:IsServer() or DataConfig.AUTO_CREATE_BRIDGE == false then
 		return
@@ -99,18 +119,20 @@ local function create_bridge()
 	BridgeFolder = bridge_folder
 end
 
-local function clone_template()
+local function clone_template(): PlayerState
 	return normalize_state(DefaultState)
 end
 
-local function reconcile_state(state)
+local function reconcile_state(state: PlayerState): PlayerState
 	local mutable_state = deep_clone(state)
+	local validated, err = validate_state(mutable_state)
 
-	if not validate_template(DataConfig.TEMPLATE, mutable_state) then
+	if not validated then
+		PrintUtil:Warn(`Data reconcile failed, resetting to default. Reason: {err}`)
 		return clone_template()
 	end
 
-	return normalize_state(mutable_state)
+	return normalize_state(validated)
 end
 
 local function make_producer(initial_state: PlayerState)
@@ -282,6 +304,16 @@ function Data:Init()
 
 	DefaultState = normalize_state(DataConfig.TEMPLATE)
 
+	if DataConfig.SCHEMA ~= nil then
+		if GreenTea.isGtType(DataConfig.SCHEMA) then
+			Schema = DataConfig.SCHEMA
+		else
+			Schema = GreenTea.build(DataConfig.SCHEMA)
+		end
+	else
+		Schema = nil
+	end
+
 	if DataConfig.ENABLED == false then
 		Data.DocumentStore = nil
 		Data.BridgeFolder = nil
@@ -298,11 +330,14 @@ function Data:Init()
 		dataStore = data_store,
 		check = function(value)
 			local mutable_value = deep_clone(value)
-			if not validate_template(DataConfig.TEMPLATE, mutable_value) then
+			local validated, err = validate_state(mutable_value)
+
+			if not validated then
+				PrintUtil:Warn(`Data document check failed: {err}`)
 				return false, DefaultState
 			end
 
-			return true, mutable_value
+			return true, validated
 		end,
 		default = clone_template(),
 		migrations = {},

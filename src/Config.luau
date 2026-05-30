@@ -14,6 +14,7 @@ local Config = {
 			Receipts = {},
 			Permissions = {},
 		},
+		SCHEMA = nil,
 		BRIDGE_FOLDER_NAME = "CraftsmanDataBridge",
 		STATE_EVENT_NAME = "StateUpdated",
 		REQUEST_FUNCTION_NAME = "RequestState",
@@ -51,6 +52,10 @@ local function deep_clone<T>(value: T, seen: { [any]: any }?): T
 		return value
 	end
 
+	if getmetatable(value :: any) ~= nil then
+		return value
+	end
+
 	local seen_table = seen or {}
 	if seen_table[value] then
 		return seen_table[value]
@@ -72,15 +77,22 @@ local function deep_merge(...: { [any]: any }): { [any]: any }
 
 	for i = 1, #sources do
 		local source = sources[i]
-		if type(source) ~= "table" then
+		-- Skip non-tables and opaque objects (e.g. GreenTea schemas).
+		if type(source) ~= "table" or getmetatable(source) ~= nil then
 			continue
 		end
 
 		for key, value in source do
-			if type(value) == "table" and type(merged[key]) == "table" then
+			-- Only recurse into plain tables; treat opaque objects as atomic values.
+			if type(value) == "table" and getmetatable(value) == nil
+				and type(merged[key]) == "table" and getmetatable(merged[key]) == nil
+			then
 				merged[key] = deep_merge(merged[key], value)
+			elseif type(value) == "table" and getmetatable(value) == nil then
+				merged[key] = deep_clone(value)
 			else
-				merged[key] = type(value) == "table" and deep_clone(value) or value
+				-- Primitives and opaque objects are assigned directly.
+				merged[key] = value
 			end
 		end
 	end
@@ -91,13 +103,14 @@ end
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CraftsmanConfig = require(ReplicatedStorage.CraftsmanConfig)
 
-export type PlayerState = typeof(CraftsmanConfig.DATA.TEMPLATE)
+export type PlayerState = typeof(CraftsmanConfig.DATA.SCHEMA:type())
 
 export type ConfigEditType = {
 	DATA: {
 		ENABLED: boolean?,
 		STORE_NAME: string?,
 		TEMPLATE: PlayerState?,
+		SCHEMA: any?,
 		BRIDGE_FOLDER_NAME: string?,
 		STATE_EVENT_NAME: string?,
 		REQUEST_FUNCTION_NAME: string?,
@@ -135,6 +148,7 @@ export type ConfigModule = {
 		ENABLED: boolean,
 		STORE_NAME: string,
 		TEMPLATE: PlayerState,
+		SCHEMA: any?,
 		BRIDGE_FOLDER_NAME: string,
 		STATE_EVENT_NAME: string,
 		REQUEST_FUNCTION_NAME: string,

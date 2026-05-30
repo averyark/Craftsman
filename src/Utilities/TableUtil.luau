@@ -24,6 +24,10 @@ function TableUtil.DeepClone<T>(value: T, seen: { [any]: any }?): T
 		return value
 	end
 
+	if getmetatable(value :: any) ~= nil then
+		return value
+	end
+
 	local seen_table = seen or {}
 	if seen_table[value] then
 		return seen_table[value]
@@ -73,15 +77,19 @@ function TableUtil.DeepMerge(...: { [any]: any }): { [any]: any }
 
 	for i = 1, #sources do
 		local source = sources[i]
-		if type(source) ~= "table" then
+		if type(source) ~= "table" or getmetatable(source :: any) ~= nil then
 			continue
 		end
 
 		for key, value in source do
-			if type(value) == "table" and type(merged[key]) == "table" then
+			if type(value) == "table" and getmetatable(value) == nil
+				and type(merged[key]) == "table" and getmetatable(merged[key]) == nil
+			then
 				merged[key] = TableUtil.DeepMerge(merged[key], value)
+			elseif type(value) == "table" and getmetatable(value) == nil then
+				merged[key] = TableUtil.DeepClone(value)
 			else
-				merged[key] = type(value) == "table" and TableUtil.DeepClone(value) or value
+				merged[key] = value
 			end
 		end
 	end
@@ -240,6 +248,10 @@ function TableUtil.EqualDeep(left: any, right: any, seen: { [any]: any }?): bool
 	end
 
 	if type(left) ~= "table" or type(right) ~= "table" then
+		return false
+	end
+
+	if getmetatable(left) ~= nil or getmetatable(right) ~= nil then
 		return false
 	end
 

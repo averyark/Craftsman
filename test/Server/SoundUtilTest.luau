@@ -83,10 +83,10 @@ function test:Start()
 		folder.Parent = workspace
 		local sound_util = Craftsman.SoundUtil.new(folder)
 
-		sound_util:AddSound("Laser", "rbxassetid://130113", group_name)
+		sound_util:AddSound("Boom", "rbxassetid://13750192967", group_name)
 
 		-- Load sound and verify SoundGroup is assigned
-		local sound = sound_util:Load("Laser")
+		local sound = sound_util:Load("Boom")
 		assert(sound.SoundGroup ~= nil, "Loaded sound should have a SoundGroup")
 		assert(sound.SoundGroup.Name == group_name, "Loaded sound should have the correct SoundGroup name")
 
@@ -100,12 +100,12 @@ function test:Start()
 		folder.Parent = workspace
 		local sound_util = Craftsman.SoundUtil.new(folder)
 
-		sound_util:AddSound("Explosion", "rbxassetid://130113", group_name)
+		sound_util:AddSound("Boom", "rbxassetid://13750192967", group_name)
 
 		-- Set new group separately before load
-		sound_util:SetSoundGroup("Explosion", new_group_name)
+		sound_util:SetSoundGroup("Boom", new_group_name)
 
-		local sound = sound_util:Load("Explosion")
+		local sound = sound_util:Load("Boom")
 		assert(sound.SoundGroup.Name == new_group_name, "Should use updated sound group")
 
 		-- Update separately after load

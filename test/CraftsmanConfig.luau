@@ -6,6 +6,8 @@
     Created     > 23/05/2026
 --]]
 
+const gt = require(game.ReplicatedStorage.Packages.gt)
+
 local KEYS = {
 	-- Products
 	Add100Coins = 3596765117,
@@ -32,6 +34,12 @@ local TEMPLATE = {
 	Coins = 0,
 }
 
+local SCHEMA = gt.build(gt.table({
+	Receipts = gt.table({ [gt.any()] = gt.any() }),
+	Permissions = gt.table({ [gt.any()] = gt.any() }),
+	Coins = gt.number(),
+}))
+
 return {
 	MARKET = {
 		KEYS = KEYS,
@@ -40,5 +48,6 @@ return {
 	},
 	DATA = {
 		TEMPLATE = TEMPLATE,
-	}
+		SCHEMA = SCHEMA,
+	},
 }

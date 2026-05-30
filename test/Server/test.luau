@@ -26,7 +26,7 @@ test.Start = function()
 
 	Craftsman.MarketServer:RegisterHandler("Add1000Coins", function(player, state, definition, context)
 		local new_state = Craftsman.TableUtil.DeepClone(state)
-		new_state.Coins = (new_state.Coins or 0) + 1000
+		new_state.Coins = "TEST"
 		return new_state
 	end)
 
@@ -60,13 +60,7 @@ test.Start = function()
 				local amount_to_add = base_coins * multiplier
 
 				Craftsman.PrintUtil:Print(
-					string.format(
-						"[test] Awarding %d coins to player %s (base: %d, multiplier: %d)",
-						amount_to_add,
-						player.Name,
-						base_coins,
-						multiplier
-					)
+					` Awarding {amount_to_add} coins to player {player.Name} (base: {base_coins}, multiplier: {multiplier})`
 				)
 
 				Craftsman.DataServer:UpdateState(player, function(state)
