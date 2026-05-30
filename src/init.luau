@@ -6,6 +6,8 @@ local DataServer = nil
 local DataClient = require("@self/Data/Client")
 local MarketServer = nil
 local MarketClient = require("@self/Market/Client")
+local StateMachineServer = nil
+local StateMachineClient = require("@self/StateMachine/Client")
 const Entity = require("@self/Entity")
 const Player = require("@self/Player")
 const Queue = require("@self/Queue")
@@ -21,10 +23,12 @@ const Tag = require("@self/Tag")
 if RunService:IsServer() then
 	DataServer = require("@self/Data/Server")
 	MarketServer = require("@self/Market/Server")
+	StateMachineServer = require("@self/StateMachine/Server")
 end
 
 const ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local StateMachine = require("@self/StateMachine")
 local Machine = require("@self/StateMachine/Machine")
 
 local State = require("@self/StateMachine/State")
@@ -42,6 +46,9 @@ local Craftsman = {
 	DataClient = DataClient, -- Client Data Access
 	MarketServer = MarketServer, -- Server Marketplace Logic
 	MarketClient = MarketClient, -- Client Marketplace Access
+	StateMachine = StateMachine, -- State Machine Namespace
+	StateMachineServer = StateMachineServer, -- Server State Machine Replication
+	StateMachineClient = StateMachineClient, -- Client State Machine Replication
 
 	InputUtil = InputUtil, -- User Input Handling
 	PrintUtil = PrintUtil, -- Debugging and Printing
@@ -84,7 +91,12 @@ if custom_config_instance and custom_config_instance:IsA("ModuleScript") then
 			if custom_config.GAMEPASSES ~= nil then
 				Config.MARKET.GAMEPASSES = custom_config.GAMEPASSES
 			end
-		elseif custom_config.DATA ~= nil or custom_config.MARKET ~= nil or custom_config.MODULE_LOAD_ORDER ~= nil then
+		elseif
+			custom_config.DATA ~= nil
+			or custom_config.MARKET ~= nil
+			or custom_config.STATE_MACHINE ~= nil
+			or custom_config.MODULE_LOAD_ORDER ~= nil
+		then
 			Config:Edit(custom_config)
 		end
 	end

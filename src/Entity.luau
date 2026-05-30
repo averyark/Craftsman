@@ -7,11 +7,14 @@
 --]]
 
 const Players = game:GetService("Players")
+const HttpService = game:GetService("HttpService")
+const RunService = game:GetService("RunService")
 
 const Keeper = require("../../../Keeper")
 local Signal = require("./Signal")
 
 const Player = require("./Player")
+const StateMachine = require("./StateMachine")
 const AnimationUtil = require("./Utilities/AnimationUtil")
 const SoundUtil = require("./Utilities/SoundUtil")
 
@@ -20,6 +23,21 @@ local function is_airborne_state(state: Enum.HumanoidStateType)
 		or state == Enum.HumanoidStateType.Freefall
 		or state == Enum.HumanoidStateType.FallingDown
 		or state == Enum.HumanoidStateType.Flying
+end
+
+local function resolve_entity_id(instance: Instance): string
+	local entity_id = instance:GetAttribute("EntityId")
+	if type(entity_id) == "string" and entity_id ~= "" then
+		return entity_id
+	end
+
+	if RunService:IsServer() then
+		entity_id = HttpService:GenerateGUID(false)
+		instance:SetAttribute("EntityId", entity_id)
+		return entity_id
+	end
+
+	return tostring(entity_id or instance.Name)
 end
 
 local Entity = {
@@ -42,6 +60,13 @@ function Entity.new(instance: Instance, player: Player?)
 
 	self.Keeper = Keeper.new()
 	self.Keeper:AttachToInstance(instance)
+
+	self.EntityId = resolve_entity_id(instance)
+	self.Machines = {} :: { [string]: typeof(StateMachine.Machine.new("")) }
+
+	local state_machine = self.Keeper:Construct(StateMachine.Machine.new, self.EntityId)
+	self.State = state_machine
+	self.Machines.State = state_machine
 
 	self.Instance = instance
 	local resolved_player = player or Players:GetPlayerFromCharacter(instance)
@@ -109,6 +134,25 @@ function Entity.Get(instance: Instance): Entity?
 	end
 
 	return EntityObjects[instance]
+end
+
+function EntityClass.Machine(self: Entity, id: string)
+	if self.Machines[id] then
+		return self.Machines[id]
+	end
+
+	local machine = self.Keeper:Construct(StateMachine.Machine.new, `{self.EntityId}-{id}`)
+	self.Machines[id] = machine
+
+	return machine
+end
+
+function EntityClass.RemoveMachine(self: Entity, id: string)
+	local machine = self.Machines[id]
+	if machine then
+		self.Keeper:Remove(machine)
+		self.Machines[id] = nil
+	end
 end
 
 function EntityClass.IsAlive(self: Entity)

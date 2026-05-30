@@ -14,6 +14,7 @@ const Keeper = require("../../../Keeper")
 const DataClient = require("./Data/Client")
 const Config = require("./Config")
 const Signal = require("./Signal")
+const StateMachine = require("./StateMachine")
 
 const PrintUtil = require("./Utilities/PrintUtil")
 local DataServer = nil
@@ -87,6 +88,13 @@ function PlayerModule.new(instance: Player)
 	self._Destroyed = false
 	PlayerObjects[instance] = self
 
+	self.EntityId = `Player-{tostring(instance.UserId)}`
+	self.Machines = {} :: { [string]: typeof(StateMachine.Machine.new("")) }
+
+	local state_machine = self.Keeper:Construct(StateMachine.Machine.new, self.EntityId)
+	self.State = state_machine
+	self.Machines.State = state_machine
+
 	self.Keeper:Connect(instance.CharacterAdded, function(character)
 		self.Character = character
 	end)
@@ -137,6 +145,25 @@ end
 
 function PlayerClass.GetUserId(self: PlayerObject)
 	return self.Instance.UserId
+end
+
+function PlayerClass.Machine(self: PlayerObject, id: string)
+	if self.Machines[id] then
+		return self.Machines[id]
+	end
+
+	local machine = self.Keeper:Construct(StateMachine.Machine.new, `{self.EntityId}-{id}`)
+	self.Machines[id] = machine
+
+	return machine
+end
+
+function PlayerClass.RemoveMachine(self: PlayerObject, id: string)
+	local machine = self.Machines[id]
+	if machine then
+		self.Keeper:Remove(machine)
+		self.Machines[id] = nil
+	end
 end
 
 function PlayerClass.GetName(self: PlayerObject)

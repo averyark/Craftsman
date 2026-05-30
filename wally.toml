@@ -1,11 +1,11 @@
 [package]
 name = "averyark/craftsman"
-version = "0.4.3"
+version = "0.4.5"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 authors = ["averyark"]
 license = "MIT"
-description = "Craftsman is a proprietary lightweight roblox scripting framework and scripting kit."
+description = "Craftsman is a proprietary roblox scripting framework and scripting kit."
 exclude = [
     "test/**",
     "aftman.toml",
@@ -25,3 +25,4 @@ DocumentService = "anthony0br/documentservice@1.2.2"
 Signal = "sleitnick/signal@2.0.3"
 Spr = "kiy4ku/spr@2.1.0"
 Keeper = "averyark/keeper@1.9.1"
+gt = "corecii/greentea@0.4.11"

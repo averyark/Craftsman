@@ -32,9 +32,11 @@ function Bootstrap:Start(modules: Instance?)
 	if RunService:IsClient() then
 		Craftsman.DataClient:Start()
 		Craftsman.MarketClient:Start()
+		Craftsman.StateMachineClient:Start()
 	else
 		Craftsman.DataServer:Start()
 		Craftsman.MarketServer:Start()
+		Craftsman.StateMachineServer:Start()
 	end
 
 	if modules then

@@ -37,6 +37,12 @@ local Config = {
 		PRODUCTS = {},
 		GAMEPASSES = {},
 	},
+	STATE_MACHINE = {
+		ENABLED = true,
+		AUTO_START_SERVER = true,
+		AUTO_START_CLIENT = true,
+		SYNC_CLIENT = true,
+	},
 	MODULE_LOAD_ORDER = {},
 }
 
@@ -115,6 +121,12 @@ export type ConfigEditType = {
 		PRODUCTS: { [any]: any }?,
 		GAMEPASSES: { [any]: any }?,
 	}?,
+	STATE_MACHINE: {
+		ENABLED: boolean?,
+		AUTO_START_SERVER: boolean?,
+		AUTO_START_CLIENT: boolean?,
+		SYNC_CLIENT: boolean?,
+	}?,
 	MODULE_LOAD_ORDER: { [any]: any }?,
 }
 
@@ -145,6 +157,12 @@ export type ConfigModule = {
 		KEYS: { [string]: number },
 		PRODUCTS: { [any]: any },
 		GAMEPASSES: { [any]: any },
+	},
+	STATE_MACHINE: {
+		ENABLED: boolean,
+		AUTO_START_SERVER: boolean,
+		AUTO_START_CLIENT: boolean,
+		SYNC_CLIENT: boolean,
 	},
 	MODULE_LOAD_ORDER: { [any]: any },
 	Edit: (self: ConfigModule, changes: ConfigEditType) -> (),
