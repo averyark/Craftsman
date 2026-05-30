@@ -29,24 +29,28 @@ function test:Start()
 	end)
 
 	run_case(results, "AnimationUtil instance caching works by default", function()
-		local folder = Instance.new("Folder")
-		folder.Parent = workspace
+		local model = Instance.new("Model")
+		model.Parent = workspace
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
 		local animator = Instance.new("Animator")
-		animator.Parent = folder
+		animator.Parent = controller
 
 		local a1 = Craftsman.AnimationUtil.new(animator)
 		local a2 = Craftsman.AnimationUtil.Get(animator)
 
 		assert(a1 == a2, "Subsequent calls to new/Get with same animator should return cached utility")
 
-		folder:Destroy()
+		model:Destroy()
 	end)
 
 	run_case(results, "AnimationUtil force_new parameter bypasses caching", function()
-		local folder = Instance.new("Folder")
-		folder.Parent = workspace
+		local model = Instance.new("Model")
+		model.Parent = workspace
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
 		local animator = Instance.new("Animator")
-		animator.Parent = folder
+		animator.Parent = controller
 
 		local a1 = Craftsman.AnimationUtil.new(animator)
 		local a2 = Craftsman.AnimationUtil.new(animator, nil, true)
@@ -57,32 +61,35 @@ function test:Start()
 		local a3 = Craftsman.AnimationUtil.Get(animator)
 		assert(a3 == a1, "Caching for the original should remain unaffected by force_new")
 
-		folder:Destroy()
+		model:Destroy()
 	end)
 
 	run_case(results, "AnimationUtil.Destroy cleans up cache and internal states", function()
-		local folder = Instance.new("Folder")
-		folder.Parent = workspace
+		local model = Instance.new("Model")
+		model.Parent = workspace
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
 		local animator = Instance.new("Animator")
-		animator.Parent = folder
+		animator.Parent = controller
 
 		local a1 = Craftsman.AnimationUtil.new(animator)
 
 		a1:Destroy()
 
 		-- Verify cache is cleared
-		local a2 = Craftsman.AnimationUtil.new(animator, nil, true)
-		local a3 = Craftsman.AnimationUtil.Get(animator)
-		assert(a2 == a3, "Get should return the newly created instance after Destroy cleared the cache")
+		local a2 = Craftsman.AnimationUtil.Get(animator)
+		assert(a2 ~= a1, "Get should return a new instance after the previous one was destroyed")
 
-		folder:Destroy()
+		model:Destroy()
 	end)
 
 	run_case(results, "Reference cleanup upon removing an animation", function()
-		local folder = Instance.new("Folder")
-		folder.Parent = workspace
+		local model = Instance.new("Model")
+		model.Parent = workspace
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
 		local animator = Instance.new("Animator")
-		animator.Parent = folder
+		animator.Parent = controller
 
 		local a1 = Craftsman.AnimationUtil.new(animator)
 
@@ -93,7 +100,7 @@ function test:Start()
 		assert(a1.AnimationMap["Run"] == nil, "AnimationMap entry should be nil after removal")
 		assert(a1.ActivePromises["Run"] == nil, "ActivePromises entry should be nil after removal")
 
-		folder:Destroy()
+		model:Destroy()
 	end)
 
 	Craftsman.PrintUtil:ListPrint("AnimationUtil Test Results", { "Case", "Status", "Message" }, results)

@@ -73,15 +73,19 @@ local function create_machine(log: { string })
 	return machine, root, a, b, leaf
 end
 
-local function run_case(results: { TestResult }, case_name: string, callback: () -> ())
+local function run_case(results: { { string } }, case_name: string, callback: () -> ())
 	local ok, err = pcall(callback)
-	results[#results + 1] = { case_name, if ok then "success" else "fail", if ok then "" else tostring(err) }
+	table.insert(results, {
+		case_name,
+		if ok then "success" else "fail",
+		if ok then "" else tostring(err),
+	})
 end
 
 function test:Start()
 	trace("StateMachine test started")
 
-	local results: { TestResult } = {}
+	local results: { { string } } = {}
 
 	run_case(results, "register and wire states", function()
 		local log: { string } = {}

@@ -157,9 +157,8 @@ function test:Start()
 		s1:Destroy()
 
 		-- Verify cache is cleared
-		local s2 = Craftsman.SoundUtil.new(folder, nil, true)
-		local s3 = Craftsman.SoundUtil.Get(folder)
-		assert(s2 == s3, "Get should return the newly created instance after Destroy cleared the cache")
+		local s2 = Craftsman.SoundUtil.Get(folder)
+		assert(s2 ~= s1, "Get should return a new instance after the previous one was destroyed")
 
 		folder:Destroy()
 	end)

@@ -15,9 +15,13 @@ local Network = Craftsman.StateMachine.Network
 
 local test = Craftsman.Component.new({})
 
-local function run_case(results, name, fn)
-	local ok, err = pcall(fn)
-	results[#results + 1] = { name, if ok then "success" else "fail", if ok then "" else tostring(err) }
+local function run_case(results: { { string } }, case_name: string, callback: () -> ())
+	local ok, err = pcall(callback)
+	table.insert(results, {
+		case_name,
+		if ok then "success" else "fail",
+		if ok then "" else tostring(err),
+	})
 end
 
 local function with_patched_method(object, key, replacement, callback)
@@ -109,10 +113,7 @@ function test:Start()
 		assert(not StateMachineClient:Unregister(machine), "destroyed machine should already be unregistered")
 	end)
 
-	for i = 1, #results do
-		local r = results[i]
-		PrintUtil:Print(`Test {r[1]}: {r[2]} {r[3]}`)
-	end
+	PrintUtil:ListPrint("StateMachine Client Integration Test Results", { "Case", "Status", "Message" }, results)
 
 	return results
 end

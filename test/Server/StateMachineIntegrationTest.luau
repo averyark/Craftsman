@@ -15,9 +15,13 @@ local Network = Craftsman.StateMachine.Network
 
 local test = Craftsman.Component.new({})
 
-local function run_case(results, name, fn)
-	local ok, err = pcall(fn)
-	results[#results + 1] = { name, if ok then "success" else "fail", if ok then "" else tostring(err) }
+local function run_case(results: { { string } }, case_name: string, callback: () -> ())
+	local ok, err = pcall(callback)
+	table.insert(results, {
+		case_name,
+		if ok then "success" else "fail",
+		if ok then "" else tostring(err),
+	})
 end
 
 local function record_event(log, kind, state_name, context, dt)
@@ -399,11 +403,7 @@ function test:Start()
 		Network.packets.MachineUpdated.sendToList = orig_sendToList
 	end)
 
-	-- Print results
-	for i = 1, #results do
-		local r = results[i]
-		PrintUtil:Print(`Test {r[1]}: {r[2]} {r[3]}`)
-	end
+	PrintUtil:ListPrint("StateMachine Integration Test Results", { "Case", "Status", "Message" }, results)
 
 	return results
 end
