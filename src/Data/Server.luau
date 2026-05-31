@@ -35,7 +35,7 @@ local DocumentStore = (nil :: any) :: typeof(DocumentService.DocumentStore.new(.
 local BridgeFolder = nil
 local Schema = nil
 
-local function deep_clone(value)
+local function deep_clone<T>(value: T): T
 	if type(value) ~= "table" then
 		return value
 	end
@@ -46,10 +46,10 @@ local function deep_clone(value)
 		clone[deep_clone(key)] = deep_clone(child)
 	end
 
-	return clone
+	return clone :: any
 end
 
-local function normalize_state(value)
+local function normalize_state(value): PlayerState
 	if type(value) ~= "table" then
 		return value
 	end
@@ -57,7 +57,7 @@ local function normalize_state(value)
 	return table.freeze(deep_clone(value))
 end
 
-local function validate_template(template, value)
+local function validate_template(template: PlayerState, value: PlayerState): boolean
 	if type(template) ~= "table" then
 		return typeof(value) == typeof(template)
 	end

@@ -120,7 +120,7 @@ end
 function WorldUtil:RayBelow(param: {
 	Position: Vector3,
 	Distance: number,
-	RayParamsId: string,
+	RayParamsId: string?,
 	RayParams: RaycastParams?,
 } & CastOptions): RaycastResult?
 	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
@@ -141,7 +141,7 @@ end
 function WorldUtil:IsGrounded(param: {
 	Position: Vector3,
 	Distance: number,
-	RayParamsId: string,
+	RayParamsId: string?,
 	RayParams: RaycastParams?,
 } & CastOptions): boolean
 	local raycast_result = self:RayBelow(param)
@@ -261,7 +261,7 @@ end
 function WorldUtil:GetGroundNormal(param: {
 	Position: Vector3,
 	Distance: number,
-	RayParamsId: string,
+	RayParamsId: string?,
 	RayParams: RaycastParams?,
 } & CastOptions): Vector3?
 	local raycast_result = self:RayBelow(param)
@@ -281,7 +281,7 @@ end
 function WorldUtil:GetPartsInRadius(param: {
 	Center: Vector3,
 	Radius: number,
-	OverlapParamsId: string,
+	OverlapParamsId: string?,
 	OverlapParams: OverlapParams?,
 }): { BasePart }
 	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
@@ -297,7 +297,7 @@ end
 function WorldUtil:GetPartsInBox(param: {
 	CFrame: CFrame,
 	Size: Vector3,
-	OverlapParamsId: string,
+	OverlapParamsId: string?,
 	OverlapParams: OverlapParams?,
 }): { BasePart }
 	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
@@ -312,7 +312,7 @@ end
 ]]--
 function WorldUtil:GetPartsInPart(param: {
 	Part: BasePart,
-	OverlapParamsId: string,
+	OverlapParamsId: string?,
 	OverlapParams: OverlapParams?,
 }): { BasePart }
 	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)

@@ -27,7 +27,7 @@ local StateProducer = nil
 local IsLoaded = false
 local LoadedState: PlayerState = nil :: any
 
-local function normalize_state(value)
+local function normalize_state(value): PlayerState
 	if type(value) ~= "table" then
 		return value
 	end
@@ -35,7 +35,7 @@ local function normalize_state(value)
 	return table.freeze(TableUtil.DeepClone(value))
 end
 
-local function clone_template()
+local function clone_template(): PlayerState
 	return normalize_state(DefaultState)
 end
 
@@ -156,7 +156,7 @@ function Client:Start()
 	end)
 end
 
-function Client:GetState(selector)
+function Client:GetState(selector): PlayerState
 	local state = ensure_producer():getState(selector)
 
 	if type(state) == "table" then

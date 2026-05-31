@@ -163,6 +163,124 @@ function test:Start()
 		folder:Destroy()
 	end)
 
+	run_case(results, "AddSound immediately instantiates Sound in target_instance", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+		local sound_util = Craftsman.SoundUtil.new(folder)
+
+		sound_util:AddSound("Boom", "rbxassetid://13750192967")
+
+		local sound = folder:FindFirstChild("Boom")
+		assert(sound ~= nil, "Sound should be immediately instantiated in the folder")
+		assert(sound:IsA("Sound"), "Instantiated child should be a Sound")
+		assert(sound.SoundId == "rbxassetid://13750192967", "SoundId should match")
+
+		folder:Destroy()
+	end)
+
+	run_case(results, "AddSound deduplication: multiple calls do not create duplicates", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+		local sound_util = Craftsman.SoundUtil.new(folder)
+
+		sound_util:AddSound("Boom", "rbxassetid://13750192967")
+		sound_util:AddSound("Boom", "rbxassetid://9876543210")
+
+		local sounds = {}
+		for _, child in folder:GetChildren() do
+			if child.Name == "Boom" and child:IsA("Sound") then
+				table.insert(sounds, child)
+			end
+		end
+
+		assert(#sounds == 1, "There should be exactly one Sound instance in target_instance, no duplicates")
+		assert(sounds[1].SoundId == "rbxassetid://9876543210", "SoundId should be updated to the new one")
+
+		folder:Destroy()
+	end)
+
+	run_case(results, "AddSound deduplication: reuses pre-existing Sound child in target_instance", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+
+		-- Pre-create Sound instance in folder
+		local pre_existing = Instance.new("Sound")
+		pre_existing.Name = "Boom"
+		pre_existing.SoundId = "rbxassetid://11111111"
+		pre_existing.Parent = folder
+
+		local sound_util = Craftsman.SoundUtil.new(folder)
+		sound_util:AddSound("Boom", "rbxassetid://22222222")
+
+		local sounds = {}
+		for _, child in folder:GetChildren() do
+			if child.Name == "Boom" and child:IsA("Sound") then
+				table.insert(sounds, child)
+			end
+		end
+
+		assert(#sounds == 1, "Should reuse pre-existing Sound and not create a duplicate")
+		assert(sounds[1] == pre_existing, "Should be the exact pre-existing sound instance")
+		assert(pre_existing.SoundId == "rbxassetid://22222222", "SoundId should be updated to the new one")
+
+		folder:Destroy()
+	end)
+
+	run_case(results, "Play with PlayDuplicate = true clones and plays duplicate sound", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+		local sound_util = Craftsman.SoundUtil.new(folder)
+		sound_util:AddSound("Boom", "rbxassetid://13750192967")
+
+		local original_sound = folder:FindFirstChild("Boom")
+		assert(original_sound ~= nil, "Original sound should exist")
+
+		local on_play_fired = false
+		local played_sound = nil
+		local conn = sound_util.OnPlay:Connect(function(name, sound)
+			if name == "Boom" then
+				on_play_fired = true
+				played_sound = sound
+			end
+		end)
+
+		sound_util:Play("Boom", { PlayDuplicate = true, Volume = 0.8 })
+
+		assert(on_play_fired == true, "OnPlay should have fired")
+		assert(played_sound ~= nil, "Should have passed the played sound")
+		assert(played_sound ~= original_sound, "Played sound should be a clone, not the original")
+		assert(played_sound.Volume == 0.8, "Should apply properties to the cloned sound")
+		assert(played_sound.Parent == folder, "Cloned sound should be parented to the same parent as original")
+
+		conn:Disconnect()
+		folder:Destroy()
+	end)
+
+	run_case(results, "PlayAsync with PlayDuplicate = true cancellation cleans up clone", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+		local sound_util = Craftsman.SoundUtil.new(folder)
+		sound_util:AddSound("Boom", "rbxassetid://13750192967")
+
+		local played_sound = nil
+		local conn = sound_util.OnPlay:Connect(function(name, sound)
+			if name == "Boom" then
+				played_sound = sound
+			end
+		end)
+
+		local p = sound_util:PlayAsync("Boom", { PlayDuplicate = true })
+		assert(played_sound ~= nil, "Should have played duplicate")
+		assert(played_sound ~= folder:FindFirstChild("Boom"), "Should be a duplicate instance, not the original")
+
+		p:cancel()
+
+		assert(played_sound.Parent == nil, "Duplicate should be destroyed and unparented upon cancellation")
+
+		conn:Disconnect()
+		folder:Destroy()
+	end)
+
 	Craftsman.PrintUtil:ListPrint("SoundUtil SoundGroup Test Results", { "Case", "Status", "Message" }, results)
 end
 
