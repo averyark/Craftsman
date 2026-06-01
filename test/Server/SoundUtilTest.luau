@@ -111,7 +111,7 @@ function test:Start()
 		-- Update separately after load
 		local custom_group = Instance.new("SoundGroup")
 		custom_group.Name = "CustomGroup"
-		sound_util:SetSoundGroup("Explosion", custom_group)
+		sound_util:SetSoundGroup("Boom", custom_group)
 
 		assert(sound.SoundGroup == custom_group, "Should immediately update loaded sound instance")
 
@@ -244,12 +244,15 @@ function test:Start()
 			end
 		end)
 
-		sound_util:Play("Boom", { PlayDuplicate = true, Volume = 0.8 })
+		sound_util:Play("Boom", { PlayDuplicate = true, Volume = 0.25 })
 
 		assert(on_play_fired == true, "OnPlay should have fired")
 		assert(played_sound ~= nil, "Should have passed the played sound")
 		assert(played_sound ~= original_sound, "Played sound should be a clone, not the original")
-		assert(played_sound.Volume == 0.8, "Should apply properties to the cloned sound")
+		assert(
+			played_sound.Volume == 0.25,
+			"Should apply properties to the cloned sound. Got Volume: " .. tostring(played_sound.Volume)
+		)
 		assert(played_sound.Parent == folder, "Cloned sound should be parented to the same parent as original")
 
 		conn:Disconnect()
@@ -278,6 +281,145 @@ function test:Start()
 		assert(played_sound.Parent == nil, "Duplicate should be destroyed and unparented upon cancellation")
 
 		conn:Disconnect()
+		folder:Destroy()
+	end)
+
+	run_case(results, "QuickPlay static plays sound instantly", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+
+		local sound = Craftsman.SoundUtil.QuickPlay(folder, {
+			SoundId = "rbxassetid://13750192967",
+			Volume = 0.5,
+		})
+
+		assert(sound ~= nil, "Sound should not be nil")
+		assert(sound.Parent == folder, "Sound should be parented to folder")
+		assert(sound.Volume == 0.5, "Volume should be set")
+		assert(sound.SoundId == "rbxassetid://13750192967", "SoundId should match")
+
+		folder:Destroy()
+	end)
+
+	run_case(results, "QuickPlay instance plays sound by name", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+
+		local sound_util = Craftsman.SoundUtil.new(folder)
+		sound_util:AddSound("Boom", "rbxassetid://13750192967")
+
+		local on_play_fired = false
+		local conn = sound_util.OnPlay:Connect(function(name, sound)
+			if name == "Boom" then
+				on_play_fired = true
+			end
+		end)
+
+		local sound = sound_util:QuickPlay({
+			Name = "Boom",
+			Volume = 0.25,
+		})
+
+		assert(sound ~= nil, "Sound should not be nil")
+		assert(sound.Parent == folder, "Sound should be parented to folder")
+		assert(sound.Volume == 0.25, "Volume should be set. Got Volume: " .. tostring(sound.Volume))
+		assert(on_play_fired == true, "OnPlay should have fired")
+
+		conn:Disconnect()
+		folder:Destroy()
+	end)
+
+	run_case(results, "Global sound registration and fallback resolution", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+
+		-- 1. Register a sound globally
+		Craftsman.SoundUtil.Register("GlobalBoom", "rbxassetid://13750192967")
+
+		-- 2. AddSound without sound_id (derives from global registry)
+		local sound_util = Craftsman.SoundUtil.new(folder)
+		sound_util:AddSound("GlobalBoom")
+
+		local sound = sound_util:EnsureLoaded("GlobalBoom")
+		assert(sound ~= nil, "Sound should be loaded")
+		assert(sound.SoundId == "rbxassetid://13750192967", "Should inherit SoundId from global registry")
+
+		-- 3. QuickPlay with string name (derives from global registry)
+		local played_sound = sound_util:QuickPlay("GlobalBoom")
+		assert(played_sound ~= nil, "Sound should play")
+		assert(played_sound.SoundId == "rbxassetid://13750192967", "Should play sound from global registry")
+
+		-- 4. Bulk registration via dictionary
+		Craftsman.SoundUtil.Register({
+			BulkSound1 = "rbxassetid://11111",
+			BulkSound2 = "rbxassetid://22222",
+		})
+
+		local bulk_sound = Craftsman.SoundUtil.QuickPlay(folder, "BulkSound2")
+		assert(bulk_sound ~= nil)
+		assert(bulk_sound.SoundId == "rbxassetid://22222")
+
+		folder:Destroy()
+	end)
+
+	run_case(results, "QuickPlay with PlayPart parents sound to target part", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+
+		local part = Instance.new("Part")
+		part.Parent = folder
+
+		local sound = Craftsman.SoundUtil.QuickPlay(folder, {
+			SoundId = "rbxassetid://13750192967",
+			PlayPart = part,
+			Volume = 0.5,
+		})
+
+		assert(sound ~= nil, "Sound should not be nil")
+		assert(sound.Parent == part, "Sound should be parented to the part")
+		assert(sound.Volume == 0.5, "Volume should be set")
+
+		folder:Destroy()
+	end)
+
+	run_case(results, "QuickPlay with PlayCFrame anchors and positions part at coordinate", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+
+		local cf = CFrame.new(10, 20, 30)
+		local sound = Craftsman.SoundUtil.QuickPlay(folder, {
+			SoundId = "rbxassetid://13750192967",
+			PlayCFrame = cf,
+			Volume = 0.5,
+		})
+
+		assert(sound ~= nil, "Sound should not be nil")
+		local sound_part = sound.Parent
+		assert(sound_part ~= nil, "Sound should have a parent part")
+		assert(sound_part:IsA("Part"), "Parent should be a Part")
+		assert(sound_part.Anchored == true, "Part should be anchored")
+		assert(sound_part.CFrame == cf, "CFrame should match")
+
+		folder:Destroy()
+	end)
+
+	run_case(results, "QuickPlay with PlayLocal on server throws error", function()
+		local folder = Instance.new("Folder")
+		folder.Parent = workspace
+
+		local success, err = pcall(function()
+			Craftsman.SoundUtil.QuickPlay(folder, {
+				SoundId = "rbxassetid://13750192967",
+				PlayLocal = true,
+			})
+		end)
+
+		assert(success == false, "PlayLocal on server should fail")
+		assert(
+			string.find(tostring(err), "PlayLocal must be called from the client") ~= nil,
+			"Should throw PlayLocal error"
+		)
+
 		folder:Destroy()
 	end)
 

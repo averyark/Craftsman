@@ -103,6 +103,85 @@ function test:Start()
 		model:Destroy()
 	end)
 
+	run_case(results, "QuickPlay static loads and plays animation track", function()
+		local model = Instance.new("Model")
+		model.Parent = workspace
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
+		local animator = Instance.new("Animator")
+		animator.Parent = controller
+
+		-- Register globally so QuickPlay can resolve the name
+		Craftsman.AnimationUtil.Register("QuickRun", "rbxassetid://91539600632847")
+
+		local track = Craftsman.AnimationUtil.QuickPlay(animator, "QuickRun", {
+			Speed = 2,
+		})
+
+		assert(track ~= nil, "Track should not be nil")
+		assert(track.Speed == 2, "Speed should be set to 2")
+
+		model:Destroy()
+	end)
+
+	run_case(results, "QuickPlay plays animation registered globally by name with properties", function()
+		local model = Instance.new("Model")
+		model.Parent = workspace
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
+		local animator = Instance.new("Animator")
+		animator.Parent = controller
+
+		-- Register globally so QuickPlay can resolve the name
+		Craftsman.AnimationUtil.Register("QuickRunNamed", "rbxassetid://91539600632847")
+
+		local track = Craftsman.AnimationUtil.QuickPlay(animator, "QuickRunNamed", {
+			Speed = 1.5,
+		})
+
+		assert(track ~= nil, "Track should not be nil")
+		assert(track.Speed == 1.5, "Speed should be set to 1.5")
+
+		model:Destroy()
+	end)
+
+	run_case(results, "Global animation registration and fallback resolution", function()
+		local model = Instance.new("Model")
+		model.Parent = workspace
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
+		local animator = Instance.new("Animator")
+		animator.Parent = controller
+
+		-- 1. Register an animation globally
+		Craftsman.AnimationUtil.Register("GlobalRun", "rbxassetid://91539600632847")
+
+		-- 2. AddAnimation without animation_id (derives from global registry)
+		local anim_util = Craftsman.AnimationUtil.new(animator)
+		anim_util:AddAnimation("GlobalRun")
+
+		assert(
+			anim_util.AnimationMap["GlobalRun"] == "rbxassetid://91539600632847",
+			"Should inherit AnimationId from global registry"
+		)
+
+		-- 3. QuickPlay with name (static call, derives from global registry)
+		local track = Craftsman.AnimationUtil.QuickPlay(animator, "GlobalRun")
+		assert(track ~= nil, "Track should be played")
+
+		-- 4. Bulk registration via dictionary
+		Craftsman.AnimationUtil.Register({
+			BulkRun1 = "rbxassetid://11111",
+			BulkRun2 = "rbxassetid://22222",
+		})
+
+		-- QuickPlay without properties (nil-safe)
+		local bulk_track = Craftsman.AnimationUtil.QuickPlay(animator, "BulkRun2")
+		assert(bulk_track ~= nil, "Bulk track should not be nil")
+
+		model:Destroy()
+	end)
+
 	Craftsman.PrintUtil:ListPrint("AnimationUtil Test Results", { "Case", "Status", "Message" }, results)
 end
 

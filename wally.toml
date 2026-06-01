@@ -1,6 +1,6 @@
 [package]
 name = "averyark/craftsman"
-version = "0.4.8"
+version = "0.5.0"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 authors = ["averyark"]
@@ -14,7 +14,7 @@ exclude = [
     ".gitignore",
     ".gitattributes",
     ".luaurc",
-    "Agent.md"
+    "Agent.md",
 ]
 
 [dependencies]

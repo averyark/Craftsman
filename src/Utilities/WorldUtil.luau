@@ -157,7 +157,7 @@ end
 function WorldUtil:RayFront(param: {
 	CFrame: CFrame,
 	Distance: number,
-	RayParamsId: string,
+	RayParamsId: string?,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
 } & CastOptions): RaycastResult?
@@ -185,7 +185,7 @@ end
 function WorldUtil:RaySide(param: {
 	CFrame: CFrame,
 	Distance: number,
-	RayParamsId: string,
+	RayParamsId: string?,
 	RayParams: RaycastParams?,
 	Direction: Vector3?,
 } & CastOptions): RaycastResult?
@@ -241,7 +241,7 @@ end
 function WorldUtil:GetGroundPosition(param: {
 	Position: Vector3,
 	Distance: number,
-	RayParamsId: string,
+	RayParamsId: string?,
 	RayParams: RaycastParams?,
 } & CastOptions): Vector3?
 	local raycast_result = self:RayBelow(param)

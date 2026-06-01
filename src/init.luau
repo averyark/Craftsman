@@ -18,6 +18,7 @@ const MathUtil = require("@self/Utilities/MathUtil")
 const PrintUtil = require("@self/Utilities/PrintUtil")
 const SoundUtil = require("@self/Utilities/SoundUtil")
 const TableUti = require("@self/Utilities/TableUtil")
+const TweenUtil = require("@self/Utilities/TweenUtil")
 const Tag = require("@self/Tag")
 
 if RunService:IsServer() then
@@ -57,6 +58,7 @@ local Craftsman = {
 
 	AnimationUtil = AnimationUtil, -- Animation Handling
 	SoundUtil = SoundUtil, -- Sound Handling
+	TweenUtil = TweenUtil, -- Tween Handling
 	Tag = Tag, -- Instance Tag Utility
 
 	MathUtil = MathUtil, -- Math Utilities

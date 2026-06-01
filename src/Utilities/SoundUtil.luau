@@ -12,6 +12,7 @@ const SoundService = game:GetService("SoundService")
 const Keeper = require("../../../../Keeper")
 const Promise = require("../../../../Promise")
 const Signal = require("../../../../Signal")
+const PrintUtil = require("./PrintUtil")
 
 --[[
 	@class SoundUtilModule
@@ -29,7 +30,18 @@ local SoundUtil = {}
 SoundUtil.__index = SoundUtil
 
 type SoundMap = { [string]: string }
-type SoundProperties = { [string]: any }
+type SoundProperties = {
+	PlayDuplicate: boolean?,
+	SoundGroup: string | SoundGroup?,
+	Volume: number?,
+	Looped: boolean?,
+	RollOffMode: Enum.RollOffMode?,
+	RollOffMaxDistance: number?,
+	RollOffMinDistance: number?,
+	TimePosition: number?,
+	PlaybackSpeed: number?,
+}
+
 type SoundUtilOptions = {
 	NoCache: boolean?,
 }
@@ -37,6 +49,7 @@ type PromiseLike = typeof(Promise.new(function() end))
 
 local SoundUtilCache = {}
 local SoundGroupCache = {}
+local GlobalSoundRegistry = {}
 
 --[[
 	Retrieves an existing SoundGroup from SoundService by name.
@@ -118,6 +131,23 @@ function SoundUtilModule.ConfigureSoundGroup(
 end
 
 --[[
+	Registers a sound name or dictionary of name-to-AssetId mappings globally.
+	Any SoundUtil instance will fallback to this registry when loading/playing sounds by name.
+	@param name_or_map string | { [string]: string } -- The sound name or a mapping dictionary.
+	@param sound_id string? -- The sound AssetId (required if first argument is a name).
+]]
+--
+function SoundUtilModule.Register(name_or_map: string | { [string]: string }, sound_id: string?)
+	if typeof(name_or_map) == "table" then
+		for key, value in name_or_map do
+			GlobalSoundRegistry[key] = value
+		end
+	else
+		GlobalSoundRegistry[name_or_map] = sound_id
+	end
+end
+
+--[[
 	Instantiates or retrieves a cached SoundUtil manager associated with a specific Roblox Instance.
 	@param target_instance Instance -- The Instance under which playing sound instances will be parented.
 	@param sound_map SoundMap? -- Optional mapping dictionary of sound names to AssetIds.
@@ -152,7 +182,7 @@ function SoundUtilModule.new(
 	end)
 
 	self.TargetInstance = target_instance
-	self.SoundMap = sound_map or {}
+	self.SoundMap = setmetatable(sound_map or {}, { __index = GlobalSoundRegistry })
 	self.Sounds = {}
 	self.SoundKeepers = {}
 	self.SoundGroups = {}
@@ -184,14 +214,32 @@ local function apply_properties(sound: Sound, properties: SoundProperties?)
 	if not properties then
 		return
 	end
-	for key, value in properties do
-		if key == "PlayDuplicate" then
-			continue
-		end
-		if key == "SoundGroup" and typeof(value) == "string" then
-			sound.SoundGroup = SoundUtilModule.AddSoundGroup(value)
+	if properties.Volume ~= nil then
+		sound.Volume = properties.Volume :: number
+	end
+	if properties.PlaybackSpeed ~= nil then
+		sound.PlaybackSpeed = properties.PlaybackSpeed :: number
+	end
+	if properties.Looped ~= nil then
+		sound.Looped = properties.Looped :: boolean
+	end
+	if properties.RollOffMode ~= nil then
+		sound.RollOffMode = properties.RollOffMode :: Enum.RollOffMode
+	end
+	if properties.RollOffMaxDistance ~= nil then
+		sound.RollOffMaxDistance = properties.RollOffMaxDistance :: number
+	end
+	if properties.RollOffMinDistance ~= nil then
+		sound.RollOffMinDistance = properties.RollOffMinDistance :: number
+	end
+	if properties.TimePosition ~= nil then
+		sound.TimePosition = properties.TimePosition :: number
+	end
+	if properties.SoundGroup ~= nil then
+		if typeof(properties.SoundGroup) == "string" then
+			sound.SoundGroup = SoundUtilModule.AddSoundGroup(properties.SoundGroup :: string)
 		else
-			sound[key] = value
+			sound.SoundGroup = properties.SoundGroup :: SoundGroup
 		end
 	end
 end
@@ -216,13 +264,19 @@ end
 
 --[[
 	Registers a sound name mapping to an AssetId and optionally registers its SoundGroup.
+	If sound_id is not specified, it will be derived from the global cache.
 	@param name string -- The sound name key.
-	@param sound_id string -- The asset ID (e.g. `rbxassetid://...`).
+	@param sound_id string? -- The asset ID (e.g. `rbxassetid://...`). If omitted, derives from the global cache.
 	@param sound_group (string | SoundGroup)? -- Optional SoundGroup name or instance.
 ]]
 --
-function SoundUtil.AddSound(self: SoundUtil, name: string, sound_id: string, sound_group: (string | SoundGroup)?)
-	self.SoundMap[name] = sound_id
+function SoundUtil.AddSound(self: SoundUtil, name: string, sound_id: string?, sound_group: (string | SoundGroup)?)
+	local resolved_id = sound_id or self.SoundMap[name]
+	if not resolved_id then
+		error("SoundId not specified and name '" .. name .. "' not found in global sound cache.", 2)
+	end
+
+	self.SoundMap[name] = resolved_id
 	if sound_group then
 		self:SetSoundGroup(name, sound_group)
 	end
@@ -231,7 +285,7 @@ function SoundUtil.AddSound(self: SoundUtil, name: string, sound_id: string, sou
 	local sound = self:EnsureLoaded(name)
 
 	-- Sync sound properties
-	sound.SoundId = sound_id
+	sound.SoundId = resolved_id
 	if sound_group then
 		if typeof(sound_group) == "string" then
 			sound.SoundGroup = SoundUtilModule.AddSoundGroup(sound_group)
@@ -244,11 +298,11 @@ end
 --[[
 	Alias for AddSound. Registers a sound name mapping.
 	@param name string -- The sound name key.
-	@param sound_id string -- The asset ID.
+	@param sound_id string? -- The asset ID. If omitted, derives from the global cache.
 	@param sound_group (string | SoundGroup)? -- Optional SoundGroup.
 ]]
 --
-function SoundUtil.AddSoundId(self: SoundUtil, name: string, sound_id: string, sound_group: (string | SoundGroup)?)
+function SoundUtil.AddSoundId(self: SoundUtil, name: string, sound_id: string?, sound_group: (string | SoundGroup)?)
 	self:AddSound(name, sound_id, sound_group)
 end
 
@@ -428,9 +482,12 @@ function SoundUtil.Play(self: SoundUtil, name: string, properties: SoundProperti
 			self.OnStop:Fire(name, target_sound)
 			target_sound:Destroy()
 		end)
+		-- Apply properties after parenting so Roblox Sound properties
+		-- (e.g. Volume) are reliably set on a live instance.
+		apply_properties(target_sound, properties)
+	else
+		apply_properties(target_sound, properties)
 	end
-
-	apply_properties(target_sound, properties)
 
 	target_sound:Play()
 	self.OnPlay:Fire(name, target_sound)
@@ -737,5 +794,139 @@ function SoundUtil.PlayLocal(self: SoundUtil, player: Player, name: string, prop
 
 	return sound
 end
+
+--[[
+	Plays a sound instantly on the manager's target instance using a dictionary of options or a sound name.
+	Automatically manages creating, playing, and destroying the temporary Sound instance.
+	@param sound_name string -- The registered sound name or asset ID to play.
+	@param properties SoundProperties -- Dictionary of properties for the sound:
+		- Volume: number? -- The volume of the sound.
+		- PlaybackSpeed: number? -- The speed of the playback.
+		- Looped: boolean? -- Whether the sound should loop.
+		- SoundGroup: (string | SoundGroup)? -- SoundGroup name or instance.
+		- RollOffMode: Enum.RollOffMode? -- Attenuation roll-off mode.
+		- RollOffMaxDistance: number? -- Maximum audible distance.
+		- RollOffMinDistance: number? -- Minimum distance before volume begins to drop.
+		- TimePosition: number? -- Starting position in seconds.
+		- PlayDuplicate: boolean? -- Whether to clone and play as a separate one-off duplicate.
+	@return Sound -- The created Sound instance.
+]]
+--
+function SoundUtilModule.QuickPlay(self: any, arg1: any, arg2: any): Sound
+	local sound_util: SoundUtil
+	local second_arg = arg1
+	local third_arg = arg2
+
+	if typeof(self) == "Instance" then
+		sound_util = SoundUtilModule.Get(self)
+	elseif typeof(self) == "table" and self.TargetInstance then
+		sound_util = self
+	else
+		error("QuickPlay must be called on a SoundUtil instance or a Roblox Instance", 2)
+	end
+
+	local sound_name_or_id: string? = nil
+	local properties: { [string]: any }? = nil
+
+	if typeof(second_arg) == "string" then
+		sound_name_or_id = second_arg
+		properties = third_arg
+	elseif typeof(second_arg) == "table" then
+		properties = second_arg
+		sound_name_or_id = second_arg.Name or second_arg.SoundId
+	end
+
+	local resolved_id = sound_name_or_id and (sound_util.SoundMap[sound_name_or_id] or sound_name_or_id)
+	if not resolved_id and properties then
+		resolved_id = properties.SoundId or (properties.Name and sound_util.SoundMap[properties.Name])
+	end
+
+	if not resolved_id then
+		PrintUtil:Error(
+			`Sound not found: {tostring(sound_name_or_id or (properties and (properties.Name or properties.SoundId)))}`
+		)
+		error("SoundId/Name could not be resolved for QuickPlay", 2)
+	end
+
+	local play_local = properties and (properties.PlayLocal or properties.Local)
+	local play_part = properties and (properties.PlayPart or properties.Part)
+	local play_cframe = properties and (properties.PlayCFrame or properties.CFrame)
+
+	local sound = sound_util.Keeper:Add(Instance.new("Sound"))
+	sound.SoundId = resolved_id
+	sound.Name = sound_name_or_id or "QuickPlaySound"
+
+	local name_for_events = sound_name_or_id or resolved_id
+
+	-- Set SoundGroup if specified in registry/properties
+	local sound_group = properties and properties.SoundGroup
+		or (sound_name_or_id and sound_util.SoundGroups[sound_name_or_id])
+	if sound_group then
+		if typeof(sound_group) == "string" then
+			sound.SoundGroup = SoundUtilModule.AddSoundGroup(sound_group)
+		else
+			sound.SoundGroup = sound_group
+		end
+	end
+
+	local cleanup_part = nil
+
+	if play_local then
+		if not RunService:IsClient() then
+			error("PlayLocal must be called from the client", 2)
+		end
+		local player = typeof(play_local) == "Instance" and play_local:IsA("Player") and play_local
+			or game:GetService("Players").LocalPlayer
+		if not player then
+			error("Local player not found for PlayLocal", 2)
+		end
+		sound.Parent = workspace.CurrentCamera
+	elseif play_part then
+		if typeof(play_part) ~= "Instance" then
+			error("PlayPart option must be a Roblox Instance", 2)
+		end
+		sound.Parent = play_part
+	elseif play_cframe then
+		if typeof(play_cframe) ~= "CFrame" then
+			error("PlayCFrame option must be a CFrame", 2)
+		end
+		local part = sound_util.Keeper:Add(Instance.new("Part"))
+		part.Size = Vector3.new(0.2, 0.2, 0.2)
+		part.Anchored = true
+		part.CanCollide = false
+		part.Transparency = 1
+		part.CFrame = play_cframe
+		part.Name = (sound_name_or_id or "QuickPlaySound") .. "_sound"
+		part.Parent = workspace
+
+		sound.Parent = part
+		cleanup_part = part
+	else
+		sound.Parent = sound_util.TargetInstance
+	end
+
+	-- Apply properties after parenting so Roblox Sound properties
+	-- (e.g. Volume, RollOffMode) are reliably set on a live instance.
+	apply_properties(sound, properties)
+
+	local connection
+	connection = sound_util.Keeper:Add(sound.Ended:Once(function()
+		sound_util.OnStop:Fire(name_for_events, sound)
+		if connection then
+			sound_util.Keeper:Remove(connection)
+		end
+		sound_util.Keeper:Remove(sound)
+		if cleanup_part then
+			sound_util.Keeper:Remove(cleanup_part)
+		end
+	end))
+
+	sound:Play()
+	sound_util.OnPlay:Fire(name_for_events, sound)
+
+	return sound
+end
+
+SoundUtil.QuickPlay = SoundUtilModule.QuickPlay
 
 return SoundUtilModule
