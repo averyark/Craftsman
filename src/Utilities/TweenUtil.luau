@@ -68,11 +68,11 @@ end
 	@param instance Instance -- The target Roblox instance to animate.
 	@return Tween? -- The created Roblox Tween object (if standard tween), or nil (if spring).
 ]]--
-function TweenUtil.Play(name: string, instance: Instance): Tween?
+function TweenUtil.Play(name: string, instance: Instance): Tween
 	local template = TweenTemplates[name]
 	if not template then
 		PrintUtil:Warn(`Template "{name}" not found!`)
-		return nil
+		return nil :: any
 	end
 
 	local properties = template.Properties
@@ -106,7 +106,7 @@ function TweenUtil.Play(name: string, instance: Instance): Tween?
 	-- Execute animation
 	if template.Type == "Spring" then
 		Spr.target(instance, template.Damping, template.Frequency, properties)
-		return nil
+		return nil :: any
 	end
 
 	local tween_info = TweenInfo.new(template.Duration, template.Style, template.Direction)
