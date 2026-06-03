@@ -9,11 +9,34 @@
 const Promise = require("../../../Promise")
 const Signal = require("./Signal")
 
+--[=[
+	@class Queue
+	An asynchronous task execution queue. Executed tasks are processed sequentially
+	in first-in, first-out (FIFO) order. Features robust retry mechanisms, exponential
+	backoff, delay jitter, execution timeouts, maximum queue capacities, and task
+	deduplication via unique keys.
+
+	:::note
+	Task execution functions are wrapped in Promises. The queue supports pause, resume, and drain states.
+	:::
+]=]
 local QueueModule = {}
 
 local Queue = {}
 Queue.__index = Queue
 
+--[=[
+	@interface QueueOptions
+	@within Queue
+	@field DefaultMaxRetries number? -- The default maximum retry attempts for tasks. Defaults to 0.
+	@field DefaultRetryDelay number? -- The default delay (in seconds) between retry attempts. Defaults to 0.
+	@field DefaultBackoffFactor number? -- The default exponential multiplier for retries. Defaults to 1 (constant delay).
+	@field DefaultJitterFactor number? -- The default percentage of delay range to randomize (0 to 1). Defaults to 0.
+	@field DefaultTimeout number? -- The default timeout duration (in seconds) for each task execution.
+	@field MaxSize number? -- The maximum number of items allowed in the queue (pending + running).
+	@field RetryOn ((error: any, attempt: number, context: any, entry: any) -> boolean)? -- Optional callback to decide if a task retry should be attempted.
+	Configuration options for instantiating a new queue.
+]=]
 export type QueueOptions = {
 	DefaultMaxRetries: number?,
 	DefaultRetryDelay: number?,
@@ -24,6 +47,19 @@ export type QueueOptions = {
 	RetryOn: ((error_value: any, attempt: number, context: any, entry: any) -> boolean)?,
 }
 
+--[=[
+	@interface EnqueueOptions
+	@within Queue
+	@field Key any? -- Optional deduplication key. If another task with this key is pending/running, Enqueue returns the existing task's promise.
+	@field Context any? -- Optional state/data passed as the first parameter to the executor function.
+	@field Timeout number? -- Override for the task execution timeout (in seconds).
+	@field MaxRetries number? -- Override for maximum retry attempts.
+	@field RetryDelay number? -- Override for retry delay (in seconds).
+	@field BackoffFactor number? -- Override for exponential backoff multiplier.
+	@field JitterFactor number? -- Override for delay jitter factor.
+	@field RetryOn ((error: any, attempt: number, context: any, entry: any) -> boolean)? -- Override callback to decide if this task retry should be attempted.
+	Configuration options for enqueueing a task.
+]=]
 export type EnqueueOptions = {
 	Key: any?,
 	Context: any?,
@@ -97,12 +133,20 @@ end
 
 local function clone_map(source: { [any]: any }): { [any]: any }
 	local output = {}
-	for key, value in  source do
+	for key, value in source do
 		output[key] = value
 	end
 	return output
 end
 
+--[=[
+	@function new
+	@within Queue
+	@param options QueueOptions? -- Optional configuration settings for the queue.
+	@return Queue -- A new Queue instance.
+	@tag constructor
+	Creates a new queue instance with default retry behavior, backoff multiplier, timeout, and queue limit configuration.
+]=]
 function QueueModule.new(options: QueueOptions?)
 	local resolved_options: QueueOptions = (type(options) == "table" and options or {}) :: QueueOptions
 
@@ -136,12 +180,53 @@ function QueueModule.new(options: QueueOptions?)
 		Cancelled = 0,
 	}
 
+	--[=[
+		@prop Enqueued Signal<id: number, context: any, key: any>
+		@within Queue
+		Fires when a new task is successfully added to the queue.
+	]=]
 	self.Enqueued = Signal.new()
+
+	--[=[
+		@prop Started Signal<id: number, attempt: number, context: any, key: any>
+		@within Queue
+		Fires when a task begins execution or starts a retry attempt.
+	]=]
 	self.Started = Signal.new()
+
+	--[=[
+		@prop Succeeded Signal<id: number, result: any, context: any, key: any, attempts: number>
+		@within Queue
+		Fires when a task completes execution successfully.
+	]=]
 	self.Succeeded = Signal.new()
+
+	--[=[
+		@prop Failed Signal<id: number, reason: any, context: any, key: any, attempts: number>
+		@within Queue
+		Fires when a task fails and has exhausted all retry attempts.
+	]=]
 	self.Failed = Signal.new()
+
+	--[=[
+		@prop Retried Signal<id: number, error: any, attempt: number, delay: number, context: any, key: any>
+		@within Queue
+		Fires when a task execution fails but is scheduled for retry after a delay.
+	]=]
 	self.Retried = Signal.new()
+
+	--[=[
+		@prop Cancelled Signal<id: number, reason: any, context: any, key: any>
+		@within Queue
+		Fires when a task is cancelled before or during execution.
+	]=]
 	self.Cancelled = Signal.new()
+
+	--[=[
+		@prop Drained Signal<stats: table>
+		@within Queue
+		Fires when the queue becomes completely empty (no running or pending tasks remaining).
+	]=]
 	self.Drained = Signal.new()
 
 	return self
@@ -149,6 +234,12 @@ end
 
 export type Queue = typeof(QueueModule.new(...))
 
+--[=[
+	@method _ResolveDefaults
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._ResolveDefaults(self: Queue, options: EnqueueOptions?): EnqueueOptions
 	local resolved_options: EnqueueOptions = (type(options) == "table" and options or {}) :: EnqueueOptions
 
@@ -172,6 +263,12 @@ function Queue._ResolveDefaults(self: Queue, options: EnqueueOptions?): EnqueueO
 	}
 end
 
+--[=[
+	@method _ReleaseKey
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._ReleaseKey(self: Queue, entry: QueueEntry)
 	local key = entry.Key
 	if key ~= nil and self._KeyIndex[key] == entry.Id then
@@ -179,6 +276,12 @@ function Queue._ReleaseKey(self: Queue, entry: QueueEntry)
 	end
 end
 
+--[=[
+	@method _ResolveDrainWaiters
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._ResolveDrainWaiters(self: Queue)
 	if self._SuppressDrainResolution then
 		return
@@ -198,6 +301,12 @@ function Queue._ResolveDrainWaiters(self: Queue)
 	self.Drained:Fire(self:GetStats())
 end
 
+--[=[
+	@method _RejectEntry
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._RejectEntry(self: Queue, entry: QueueEntry, reason: any, should_count_cancel: boolean)
 	if entry.Completed then
 		return
@@ -221,6 +330,12 @@ function Queue._RejectEntry(self: Queue, entry: QueueEntry, reason: any, should_
 	self:_ResolveDrainWaiters()
 end
 
+--[=[
+	@method _FulfillEntry
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._FulfillEntry(self: Queue, entry: QueueEntry, result: any)
 	if entry.Completed then
 		return
@@ -239,6 +354,12 @@ function Queue._FulfillEntry(self: Queue, entry: QueueEntry, result: any)
 	self:_ResolveDrainWaiters()
 end
 
+--[=[
+	@method _ComputeRetryDelay
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._ComputeRetryDelay(self: Queue, entry: QueueEntry): number
 	local delay = math.max(0, entry.RetryDelay or 0)
 	if delay <= 0 then
@@ -254,6 +375,12 @@ function Queue._ComputeRetryDelay(self: Queue, entry: QueueEntry): number
 	return math.max(0, random_jitter(delay, entry.JitterFactor or 0))
 end
 
+--[=[
+	@method _CanRetry
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._CanRetry(self: Queue, entry: QueueEntry, error_value: any): boolean
 	if entry.CancelRequested then
 		return false
@@ -275,6 +402,12 @@ function Queue._CanRetry(self: Queue, entry: QueueEntry, error_value: any): bool
 	return entry.Attempts <= entry.MaxRetries
 end
 
+--[=[
+	@method _ExecuteEntry
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._ExecuteEntry(self: Queue, entry: QueueEntry)
 	return Promise.new(function(resolve)
 		local function step()
@@ -329,6 +462,12 @@ function Queue._ExecuteEntry(self: Queue, entry: QueueEntry)
 	end)
 end
 
+--[=[
+	@method _Pump
+	@within Queue
+	@private
+	@ignore
+]=]
 function Queue._Pump(self: Queue)
 	if self._Running or self._Paused or self._Closed then
 		return
@@ -357,23 +496,53 @@ function Queue._Pump(self: Queue)
 	end)
 end
 
+--[=[
+	@method GetSize
+	@within Queue
+	@return number -- The total number of tasks in the queue.
+	Returns the current number of tasks in the queue (both pending and actively running).
+]=]
 function Queue.GetSize(self: Queue)
 	local running = if self._RunningEntry ~= nil then 1 else 0
 	return #self._Pending + running
 end
 
+--[=[
+	@method GetPendingCount
+	@within Queue
+	@return number -- The number of pending tasks.
+	Returns the count of tasks that are currently waiting in the queue but have not yet started executing.
+]=]
 function Queue.GetPendingCount(self: Queue)
 	return #self._Pending
 end
 
+--[=[
+	@method IsPaused
+	@within Queue
+	@return boolean -- True if the queue is paused.
+	Checks whether the queue is currently paused.
+]=]
 function Queue.IsPaused(self: Queue)
 	return self._Paused
 end
 
+--[=[
+	@method IsClosed
+	@within Queue
+	@return boolean -- True if the queue is closed.
+	Checks whether the queue is currently closed and rejecting new tasks.
+]=]
 function Queue.IsClosed(self: Queue)
 	return self._Closed
 end
 
+--[=[
+	@method GetStats
+	@within Queue
+	@return table -- A table containing a copy of queue statistics.
+	Retrieves diagnostic and performance statistics for the queue, including counts of enqueued, started, succeeded, failed, retried, and cancelled tasks.
+]=]
 function Queue.GetStats(self: Queue)
 	local stats = clone_map(self._Stats)
 	stats.Pending = #self._Pending
@@ -383,10 +552,21 @@ function Queue.GetStats(self: Queue)
 	return stats
 end
 
+--[=[
+	@method Pause
+	@within Queue
+	Pauses the execution of the queue. Active tasks currently running will complete, but no new tasks from the pending list will be started.
+]=]
 function Queue.Pause(self: Queue)
 	self._Paused = true
 end
 
+--[=[
+	@method Resume
+	@within Queue
+	@return boolean -- True if the queue was resumed or is active; false if closed.
+	Resumes task execution in the queue. If there are pending tasks, they will begin processing sequentially.
+]=]
 function Queue.Resume(self: Queue)
 	if self._Closed then
 		return false
@@ -401,6 +581,18 @@ function Queue.Resume(self: Queue)
 	return true
 end
 
+--[=[
+	@method Enqueue
+	@within Queue
+	@param executor (context: any, attempt: number, id: number) -> any -- The execution function for the task.
+	@param options EnqueueOptions? -- Optional parameters for the task.
+	@return (Promise<any>, number?, boolean) -- Returns the task Promise, task ID, and whether it was merged as a duplicate.
+	Adds a new task to the queue. If a deduplication `Key` is specified in `options` and a matching task is already pending or running, the queue merges them and returns the existing task's Promise and ID.
+
+	:::caution
+	If the queue size exceeds `MaxSize`, this method will reject the returned Promise with `"QueueFull"`. If the queue is closed, it rejects with `"QueueClosed"`.
+	:::
+]=]
 function Queue.Enqueue(
 	self: Queue,
 	executor: (context: any, attempt: number, id: number) -> any,
@@ -477,6 +669,14 @@ function Queue.Enqueue(
 	return promise, id, false
 end
 
+--[=[
+	@method Cancel
+	@within Queue
+	@param id number -- The ID of the task to cancel.
+	@param reason string? -- Optional cancellation reason. Defaults to `"Cancelled"`.
+	@return boolean -- True if a task with the given ID was found and cancellation was requested.
+	Requests the cancellation of a task. If the task is pending, it is immediately rejected. If it is currently executing, the cancel request flag is set, and the executor can check it.
+]=]
 function Queue.Cancel(self: Queue, id: number, reason: string?): boolean
 	local entry = self._Entries[id]
 	if not entry then
@@ -499,6 +699,12 @@ function Queue.Cancel(self: Queue, id: number, reason: string?): boolean
 	return true
 end
 
+--[=[
+	@method Clear
+	@within Queue
+	@param reason string? -- Optional cancellation reason to reject tasks with. Defaults to `"QueueCleared"`.
+	Cancels and rejects all pending tasks in the queue. The currently running task (if any) is not aborted, but all other tasks are cleared.
+]=]
 function Queue.Clear(self: Queue, reason: string?)
 	reason = reason or "QueueCleared"
 
@@ -517,6 +723,12 @@ function Queue.Clear(self: Queue, reason: string?)
 	self:_ResolveDrainWaiters()
 end
 
+--[=[
+	@method Drain
+	@within Queue
+	@return Promise<boolean> -- Resolves to true when the queue is completely empty.
+	Returns a Promise that resolves when the queue becomes completely empty (no running or pending tasks remaining).
+]=]
 function Queue.Drain(self: Queue)
 	if #self._Pending == 0 and self._RunningEntry == nil then
 		return Promise.resolve(true)
@@ -527,6 +739,12 @@ function Queue.Drain(self: Queue)
 	end)
 end
 
+--[=[
+	@method Close
+	@within Queue
+	@param reason string? -- Optional close reason. Defaults to `"QueueClosed"`.
+	Closes the queue to reject any new task submissions and clears/rejects all pending tasks.
+]=]
 function Queue.Close(self: Queue, reason: string?)
 	if self._Closed then
 		return
@@ -536,6 +754,12 @@ function Queue.Close(self: Queue, reason: string?)
 	self:Clear(reason or "QueueClosed")
 end
 
+--[=[
+	@method Destroy
+	@within Queue
+	@param reason string? -- Optional reason. Defaults to `"QueueDestroyed"`.
+	Closes the queue, cancels all pending tasks, and destroys all internal lifecycle Signal instances.
+]=]
 function Queue:Destroy(reason: string?)
 	self:Close(reason or "QueueDestroyed")
 

@@ -24,6 +24,12 @@ if RunService:IsServer() then
 	DataServer = require("../Data/Server")
 end
 
+--[=[
+	@class MarketServer
+	The server-side monetization module for Craftsman. It processes receipt processing for developer products
+	(integrating with standard MarketplaceService.ProcessReceipt), user gamepass ownership checks (caching and syncing),
+	and queueing transactions for robust player data changes.
+]=]
 local Market = {}
 
 local MarketConfig = Config.MARKET or {}
@@ -68,9 +74,32 @@ local function make_transaction_key(player, transaction_type, transaction_id)
 	return `{transaction_type}:{player.UserId}:{transaction_id}`
 end
 
+--[=[
+	@prop ProductGranted Signal<Player, number, any, PlayerState, any>
+	@within MarketServer
+	A signal that fires when a product purchase is successfully processed and state has saved.
+]=]
 Market.ProductGranted = Signal.new()
+
+--[=[
+	@prop GamepassGranted Signal<Player, number, any, PlayerState, any>
+	@within MarketServer
+	A signal that fires when a gamepass ownership is granted and state has saved.
+]=]
 Market.GamepassGranted = Signal.new()
+
+--[=[
+	@prop PurchaseFailed Signal<Player, number, any, string, any>
+	@within MarketServer
+	A signal that fires when a product or gamepass purchase/sync fails.
+]=]
 Market.PurchaseFailed = Signal.new()
+
+--[=[
+	@prop Handlers { [string]: PurchaseHandler }
+	@within MarketServer
+	The active registry of purchase handlers.
+]=]
 Market.Handlers = Handlers
 
 local function clone_state(state)
@@ -199,6 +228,14 @@ local function apply_definition(player, definition, context)
 	return saved_state, false, nil
 end
 
+--[=[
+	@method RegisterHandler
+	@within MarketServer
+	@param handler_name string -- Unique name of the purchase handler
+	@param callback function -- The handler function (player, state, definition, context) -> (nextState, error)
+	@return boolean -- Whether registration succeeded
+	Registers a callback function as a purchase handler.
+]=]
 function Market:RegisterHandler(handler_name, callback)
 	if type(handler_name) ~= "string" or type(callback) ~= "function" then
 		return false
@@ -208,14 +245,36 @@ function Market:RegisterHandler(handler_name, callback)
 	return true
 end
 
+--[=[
+	@method GetProductDefinition
+	@within MarketServer
+	@param product_id number -- Developer product ID
+	@return any -- The normalized configuration definition for this product
+	Retrieves the product definition from the config.
+]=]
 function Market:GetProductDefinition(product_id)
 	return normalize_definition(get_product_definitions()[product_id])
 end
 
+--[=[
+	@method GetGamepassDefinition
+	@within MarketServer
+	@param gamepass_id number -- Gamepass ID
+	@return any -- The normalized configuration definition for this gamepass
+	Retrieves the gamepass definition from the config.
+]=]
 function Market:GetGamepassDefinition(gamepass_id)
 	return normalize_definition(get_gamepass_definitions()[gamepass_id])
 end
 
+--[=[
+	@method UserOwnsGamePass
+	@within MarketServer
+	@param player Player -- Player to check
+	@param gamepass_id number -- Gamepass ID to check
+	@return boolean -- Whether the player owns the gamepass
+	Checks if a player owns the specified gamepass. Utilizes internal caching for performance.
+]=]
 function Market:UserOwnsGamePass(player, gamepass_id)
 	if not player or type(gamepass_id) ~= "number" then
 		return false
@@ -241,6 +300,17 @@ function Market:UserOwnsGamePass(player, gamepass_id)
 	return false
 end
 
+--[=[
+	@method GrantProduct
+	@within MarketServer
+	@param player Player -- Player purchasing the product
+	@param product_id number -- Developer product ID
+	@param context any? -- Optional purchase context
+	@return boolean -- Whether the grant succeeded
+	@return any -- Details (e.g. true if already processed, or error string if failed)
+	@return PlayerState? -- The updated player state if successful
+	Processes and grants a developer product. Invokes the matching registered handler and saves state.
+]=]
 function Market:GrantProduct(player, product_id, context)
 	local definition = self:GetProductDefinition(product_id)
 	if not definition then
@@ -263,6 +333,17 @@ function Market:GrantProduct(player, product_id, context)
 	return true, already_processed, state
 end
 
+--[=[
+	@method GrantGamepass
+	@within MarketServer
+	@param player Player -- Player purchasing/syncing the gamepass
+	@param gamepass_id number -- Gamepass ID
+	@param context any? -- Optional purchase/sync context
+	@return boolean -- Whether the grant succeeded
+	@return any -- Details (e.g. true if already processed, or error string if failed)
+	@return PlayerState? -- The updated player state if successful
+	Processes and grants a gamepass. Invokes the matching registered handler and saves state.
+]=]
 function Market:GrantGamepass(player, gamepass_id, context)
 	local definition = self:GetGamepassDefinition(gamepass_id)
 	if not definition then
@@ -290,6 +371,14 @@ function Market:GrantGamepass(player, gamepass_id, context)
 	return true, already_processed, state
 end
 
+--[=[
+	@method PromptProduct
+	@within MarketServer
+	@param player Player -- Player to prompt
+	@param product_id number -- Developer product ID
+	@return boolean -- Whether the prompt was successfully initiated
+	Prompts the player to purchase a developer product from the server.
+]=]
 function Market:PromptProduct(player, product_id)
 	if not Started or not player or type(product_id) ~= "number" then
 		return false
@@ -299,6 +388,14 @@ function Market:PromptProduct(player, product_id)
 	return true
 end
 
+--[=[
+	@method PromptGamepass
+	@within MarketServer
+	@param player Player -- Player to prompt
+	@param gamepass_id number -- Gamepass ID
+	@return boolean -- Whether the prompt was successfully initiated
+	Prompts the player to purchase a gamepass from the server.
+]=]
 function Market:PromptGamepass(player, gamepass_id)
 	if not Started or not player or type(gamepass_id) ~= "number" then
 		return false
@@ -308,6 +405,13 @@ function Market:PromptGamepass(player, gamepass_id)
 	return true
 end
 
+--[=[
+	@method _EnqueueTransaction
+	@private
+	@ignore
+	@within MarketServer
+	Enqueues a transaction in the transaction queue to guarantee serialized processing.
+]=]
 function Market:_EnqueueTransaction(player, transaction_key, context, callback)
 	local queue = get_transaction_queue()
 
@@ -326,6 +430,13 @@ function Market:_EnqueueTransaction(player, transaction_key, context, callback)
 	return promise
 end
 
+--[=[
+	@method _ProcessReceipt
+	@private
+	@ignore
+	@within MarketServer
+	Main entry point for Roblox MarketplaceService.ProcessReceipt.
+]=]
 function Market:_ProcessReceipt(receipt_info)
 	if type(receipt_info) ~= "table" then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
@@ -374,6 +485,11 @@ function Market:_ProcessReceipt(receipt_info)
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
+--[=[
+	@method Init
+	@within MarketServer
+	Initializes the server-side Market service.
+]=]
 function Market:Init()
 	if not RunService:IsServer() or Started then
 		return
@@ -382,6 +498,11 @@ function Market:Init()
 	get_transaction_queue()
 end
 
+--[=[
+	@method Start
+	@within MarketServer
+	Starts the server-side Market service. Hooks up PlayerAdded, PlayerRemoving, PromptGamePassPurchaseFinished, and ProcessReceipt.
+]=]
 function Market:Start()
 	if not RunService:IsServer() or MarketConfig.ENABLED == false or Started then
 		return

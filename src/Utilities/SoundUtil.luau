@@ -14,17 +14,18 @@ const Promise = require("../../../../Promise")
 const Signal = require("../../../../Signal")
 const PrintUtil = require("./PrintUtil")
 
---[[
+--[=[
 	@class SoundUtilModule
+	@ignore
 	The entry point module for SoundUtil, exposing methods to get, add, or configure Roblox SoundGroups, as well as instantiate new SoundUtil managers.
-]]
+]=]
 --
 local SoundUtilModule = {}
 
---[[
+--[=[
 	@class SoundUtil
 	An object-oriented instance that manages loading, caching, playback, spatialization, and stopping of sounds under a specific target Instance.
-]]
+]=]
 --
 local SoundUtil = {}
 SoundUtil.__index = SoundUtil
@@ -47,15 +48,16 @@ type SoundUtilOptions = {
 }
 type PromiseLike = typeof(Promise.new(function() end))
 
-local SoundUtilCache = {}
+local SoundUtilCache = {} :: { [Instance]: SoundUtil }
 local SoundGroupCache = {}
 local GlobalSoundRegistry = {}
 
---[[
+--[=[
 	Retrieves an existing SoundGroup from SoundService by name.
+	@within SoundUtil
 	@param name string -- The name of the SoundGroup.
 	@return SoundGroup? -- The SoundGroup instance if found, otherwise `nil`.
-]]
+]=]
 --
 function SoundUtilModule.GetSoundGroup(name: string): SoundGroup?
 	local cached = SoundGroupCache[name]
@@ -72,11 +74,12 @@ function SoundUtilModule.GetSoundGroup(name: string): SoundGroup?
 	return nil
 end
 
---[[
+--[=[
 	Retrieves or creates a SoundGroup under SoundService.
+	@within SoundUtil
 	@param sound_group_or_name string | SoundGroup -- The SoundGroup name or an existing SoundGroup instance.
 	@return SoundGroup -- The retrieved or created SoundGroup.
-]]
+]=]
 --
 function SoundUtilModule.AddSoundGroup(sound_group_or_name: string | SoundGroup): SoundGroup
 	if typeof(sound_group_or_name) == "string" then
@@ -112,12 +115,13 @@ function SoundUtilModule.AddSoundGroup(sound_group_or_name: string | SoundGroup)
 	end
 end
 
---[[
+--[=[
 	Retrieves or creates a SoundGroup, and applies a dictionary of properties to it.
+	@within SoundUtil
 	@param sound_group_or_name string | SoundGroup -- The SoundGroup name or an existing SoundGroup instance.
 	@param properties { [string]: any } -- Dictionary of properties to configure on the SoundGroup.
 	@return SoundGroup -- The configured SoundGroup.
-]]
+]=]
 --
 function SoundUtilModule.ConfigureSoundGroup(
 	sound_group_or_name: string | SoundGroup,
@@ -130,12 +134,13 @@ function SoundUtilModule.ConfigureSoundGroup(
 	return sound_group
 end
 
---[[
+--[=[
 	Registers a sound name or dictionary of name-to-AssetId mappings globally.
 	Any SoundUtil instance will fallback to this registry when loading/playing sounds by name.
+	@within SoundUtil
 	@param name_or_map string | { [string]: string } -- The sound name or a mapping dictionary.
 	@param sound_id string? -- The sound AssetId (required if first argument is a name).
-]]
+]=]
 --
 function SoundUtilModule.Register(name_or_map: string | { [string]: string }, sound_id: string?)
 	if typeof(name_or_map) == "table" then
@@ -147,13 +152,15 @@ function SoundUtilModule.Register(name_or_map: string | { [string]: string }, so
 	end
 end
 
---[[
+--[=[
 	Instantiates or retrieves a cached SoundUtil manager associated with a specific Roblox Instance.
+	@within SoundUtil
 	@param target_instance Instance -- The Instance under which playing sound instances will be parented.
 	@param sound_map SoundMap? -- Optional mapping dictionary of sound names to AssetIds.
 	@param options_or_force_new (SoundUtilOptions | boolean)? -- Optional configurations or boolean forcing a new instance.
 	@return SoundUtil -- The SoundUtil manager instance.
-]]
+	@tag constructor
+]=]
 --
 function SoundUtilModule.new(
 	target_instance: Instance,
@@ -198,13 +205,15 @@ function SoundUtilModule.new(
 	return self
 end
 
---[[
+--[=[
+	@function Get
+	@within SoundUtil
 	Alias for new. Retrieves or instantiates a SoundUtil manager.
 	@param target_instance Instance -- The target parent Instance.
 	@param sound_map SoundMap? -- Optional sound mapping.
 	@param options_or_force_new (SoundUtilOptions | boolean)? -- Optional configurations.
 	@return SoundUtil -- The SoundUtil manager.
-]]
+]=]
 --
 SoundUtilModule.Get = SoundUtilModule.new
 
@@ -244,11 +253,11 @@ local function apply_properties(sound: Sound, properties: SoundProperties?)
 	end
 end
 
---[[
+--[=[
 	Sets or updates the SoundGroup associated with a specific named sound.
 	@param name string -- The registered sound name.
 	@param sound_group string | SoundGroup -- The SoundGroup name or instance.
-]]
+]=]
 --
 function SoundUtil.SetSoundGroup(self: SoundUtil, name: string, sound_group: string | SoundGroup)
 	self.SoundGroups[name] = sound_group
@@ -262,13 +271,13 @@ function SoundUtil.SetSoundGroup(self: SoundUtil, name: string, sound_group: str
 	end
 end
 
---[[
+--[=[
 	Registers a sound name mapping to an AssetId and optionally registers its SoundGroup.
 	If sound_id is not specified, it will be derived from the global cache.
 	@param name string -- The sound name key.
 	@param sound_id string? -- The asset ID (e.g. `rbxassetid://...`). If omitted, derives from the global cache.
 	@param sound_group (string | SoundGroup)? -- Optional SoundGroup name or instance.
-]]
+]=]
 --
 function SoundUtil.AddSound(self: SoundUtil, name: string, sound_id: string?, sound_group: (string | SoundGroup)?)
 	local resolved_id = sound_id or self.SoundMap[name]
@@ -295,12 +304,12 @@ function SoundUtil.AddSound(self: SoundUtil, name: string, sound_id: string?, so
 	end
 end
 
---[[
+--[=[
 	Alias for AddSound. Registers a sound name mapping.
 	@param name string -- The sound name key.
 	@param sound_id string? -- The asset ID. If omitted, derives from the global cache.
 	@param sound_group (string | SoundGroup)? -- Optional SoundGroup.
-]]
+]=]
 --
 function SoundUtil.AddSoundId(self: SoundUtil, name: string, sound_id: string?, sound_group: (string | SoundGroup)?)
 	self:AddSound(name, sound_id, sound_group)
@@ -344,19 +353,19 @@ function SoundUtil._RemoveLoadedSound(self: SoundUtil, name: string)
 	self.SoundGroups[name] = nil
 end
 
---[[
+--[=[
 	Stops, destroys, and unregisters a loaded sound track by name.
 	@param name string -- The registered sound name.
-]]
+]=]
 --
 function SoundUtil.RemoveSound(self: SoundUtil, name: string)
 	self:_RemoveLoadedSound(name)
 end
 
---[[
+--[=[
 	Stops, destroys, and unregisters all matching registered sounds by AssetId.
 	@param sound_id string -- The asset ID to search and remove.
-]]
+]=]
 --
 function SoundUtil.RemoveSoundId(self: SoundUtil, sound_id: string)
 	local names_to_remove = {}
@@ -387,11 +396,11 @@ function SoundUtil.Destroy(self: SoundUtil)
 	self.SoundMap = nil
 end
 
---[[
+--[=[
 	Instantiates and loads a raw Sound instance under the target instance.
 	@param name string -- The registered sound name to load.
 	@return Sound -- The loaded playable Sound instance.
-]]
+]=]
 --
 function SoundUtil.Load(self: SoundUtil, name: string): Sound
 	local sound_instance = Instance.new("Sound")
@@ -424,11 +433,11 @@ function SoundUtil.Load(self: SoundUtil, name: string): Sound
 	return sound_instance
 end
 
---[[
+--[=[
 	Ensures a sound is loaded, returning the cached Sound instance or loading it if missing.
 	@param name string -- The registered sound name.
 	@return Sound -- The Sound instance.
-]]
+]=]
 --
 function SoundUtil.EnsureLoaded(self: SoundUtil, name: string): Sound
 	if self.Sounds[name] then
@@ -464,11 +473,11 @@ function SoundUtil.EnsureLoaded(self: SoundUtil, name: string): Sound
 	return self:Load(name)
 end
 
---[[
+--[=[
 	Plays a registered sound track and applies optional properties.
 	@param name string -- The registered sound name.
 	@param properties SoundProperties? -- Optional properties to set before playing (e.g., Pitch, Volume, SoundGroup).
-]]
+]=]
 --
 function SoundUtil.Play(self: SoundUtil, name: string, properties: SoundProperties?)
 	local sound = self:EnsureLoaded(name)
@@ -493,13 +502,13 @@ function SoundUtil.Play(self: SoundUtil, name: string, properties: SoundProperti
 	self.OnPlay:Fire(name, target_sound)
 end
 
---[[
+--[=[
 	Plays a registered sound and returns a Promise that resolves when the sound completes playing.
 	Cancels any existing active promise on the same sound if already playing.
 	@param name string -- The registered sound name.
 	@param properties SoundProperties? -- Optional properties.
 	@return Promise -- A promise that resolves when the sound ends or is stopped.
-]]
+]=]
 --
 function SoundUtil.PlayAsync(self: SoundUtil, name: string, properties: SoundProperties?): PromiseLike
 	local sound = self:EnsureLoaded(name)
@@ -582,10 +591,10 @@ function SoundUtil.PlayAsync(self: SoundUtil, name: string, properties: SoundPro
 	return play_promise
 end
 
---[[
+--[=[
 	Stops a playing sound track by name.
 	@param name string -- The registered sound name.
-]]
+]=]
 --
 function SoundUtil.Stop(self: SoundUtil, name: string)
 	local sound = self.Sounds[name]
@@ -611,12 +620,12 @@ function SoundUtil.StopAll(self: SoundUtil)
 	end
 end
 
---[[
+--[=[
 	Creates a Promise that resolves when the sound playback reaches or exceeds a specified timeline position.
 	@param name string -- The registered sound name.
 	@param target_time number -- The target playback timeline position in seconds.
 	@return Promise -- A promise that resolves with the actual timeline position reached.
-]]
+]=]
 --
 function SoundUtil.TimePositionAsync(self: SoundUtil, name: string, target_time: number): PromiseLike
 	local sound = self:EnsureLoaded(name)
@@ -654,14 +663,14 @@ function SoundUtil.TimePositionAsync(self: SoundUtil, name: string, target_time:
 	end)
 end
 
---[[
+--[=[
 	Spatializes and plays a temporary one-off sound parented under a specific Roblox Part.
 	Automatically cleans up and destroys the Sound instance when it completes playback.
 	@param part Instance -- The Roblox Part instance.
 	@param name string -- The registered sound name.
 	@param properties SoundProperties? -- Optional sound properties.
 	@return Sound -- The instantiated spatial Sound instance.
-]]
+]=]
 --
 function SoundUtil.PlayPart(self: SoundUtil, part: Instance, name: string, properties: SoundProperties?): Sound
 	local sound = self.Keeper:Add(Instance.new("Sound"))
@@ -696,14 +705,14 @@ function SoundUtil.PlayPart(self: SoundUtil, part: Instance, name: string, prope
 	return sound
 end
 
---[[
+--[=[
 	Spatializes and plays a temporary one-off sound at a specific CFrame coordinate position.
 	Instantiates a transparent, anchored part in the Workspace to parent the sound, automatically cleaning both up on finish.
 	@param cframe CFrame -- The CFrame coordinate position.
 	@param name string -- The registered sound name.
 	@param properties SoundProperties? -- Optional sound properties.
 	@return Sound -- The instantiated spatial Sound instance.
-]]
+]=]
 --
 function SoundUtil.PlayCFrame(self: SoundUtil, cframe: CFrame, name: string, properties: SoundProperties?): Sound
 	local part = self.Keeper:Add(Instance.new("Part"))
@@ -747,14 +756,14 @@ function SoundUtil.PlayCFrame(self: SoundUtil, cframe: CFrame, name: string, pro
 	return sound
 end
 
---[[
+--[=[
 	Plays a non-spatialized local client audio track parented to the CurrentCamera.
 	Must be called from a Client script environment.
 	@param player Player -- The local Player instance.
 	@param name string -- The registered sound name.
 	@param properties SoundProperties? -- Optional sound properties.
 	@return Sound -- The instantiated local client Sound instance.
-]]
+]=]
 --
 function SoundUtil.PlayLocal(self: SoundUtil, player: Player, name: string, properties: SoundProperties?): Sound
 	if not RunService:IsClient() then
@@ -795,11 +804,10 @@ function SoundUtil.PlayLocal(self: SoundUtil, player: Player, name: string, prop
 	return sound
 end
 
---[[
+--[=[
 	Plays a sound instantly on the manager's target instance using a dictionary of options or a sound name.
 	Automatically manages creating, playing, and destroying the temporary Sound instance.
-	@param sound_name string -- The registered sound name or asset ID to play.
-	@param properties SoundProperties -- Dictionary of properties for the sound:
+	@param arg1 string | SoundProperties -- The registered sound name/asset ID to play, or a properties dictionary containing:
 		- Volume: number? -- The volume of the sound.
 		- PlaybackSpeed: number? -- The speed of the playback.
 		- Looped: boolean? -- Whether the sound should loop.
@@ -809,8 +817,9 @@ end
 		- RollOffMinDistance: number? -- Minimum distance before volume begins to drop.
 		- TimePosition: number? -- Starting position in seconds.
 		- PlayDuplicate: boolean? -- Whether to clone and play as a separate one-off duplicate.
+	@param arg2 SoundProperties? -- Optional properties for the sound if the first argument is a name.
 	@return Sound -- The created Sound instance.
-]]
+]=]
 --
 function SoundUtilModule.QuickPlay(self: any, arg1: any, arg2: any): Sound
 	local sound_util: SoundUtil

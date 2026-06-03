@@ -15,6 +15,11 @@ const Client = RunService:IsClient() and require("./Client")
 
 local MachineModule = {}
 
+--[=[
+	@class Machine
+	A hierarchical state machine (HSM) implementation supporting nested states,
+	state replication, and client/server synchronization.
+]=]
 local Machine = {}
 Machine.__index = Machine
 
@@ -29,6 +34,27 @@ type PendingTransition = {
 
 local MAX_TRANSITION_BATCH = 10
 
+--[=[
+	@prop Transitioned Signal<Machine, State, State, any, Player>
+	@within Machine
+	Fires when the active state transitions to a new state.
+]=]
+
+--[=[
+	@prop Destroyed Signal<Machine>
+	@within Machine
+	Fires when the state machine is destroyed.
+]=]
+
+--[=[
+	@function new
+	@within Machine
+	@param id string? -- Optional unique identifier for the machine
+	@param is_client_authoritative boolean? -- Whether the state machine allows client-authoritative transitions
+	@return Machine -- A new state machine instance
+	@tag constructor
+	Creates a new State Machine instance.
+]=]
 local function new(id: string?, is_client_authoritative: boolean?)
 	local self = setmetatable({}, Machine)
 
@@ -87,6 +113,14 @@ local function reset_transition_queue(self: Machine)
 	self._PendingTransitionTail = 0
 end
 
+--[=[
+	@method AddState
+	@within Machine
+	@param state State -- The state object to add
+	@param parent State? -- Optional parent state to nest this state under
+	@return boolean -- Whether the state was successfully added
+	Adds a state to the state machine, optionally setting a parent state for hierarchy.
+]=]
 function Machine.AddState(self: Machine, state: State, parent: State?): boolean
 	if state == nil then
 		return false
@@ -109,28 +143,68 @@ function Machine.AddState(self: Machine, state: State, parent: State?): boolean
 	return true
 end
 
+--[=[
+	@method GetState
+	@within Machine
+	@param name string -- The name of the state
+	@return State? -- The state object, if found
+	Retrieves a registered state by its name.
+]=]
 function Machine.GetState(self: Machine, name: string): State?
 	return self._States[name]
 end
 
+--[=[
+	@method GetId
+	@within Machine
+	@return string? -- The unique identifier
+	Returns the unique identifier of the machine.
+]=]
 function Machine.GetId(self: Machine): string?
 	return self._Id
 end
 
+--[=[
+	@method SetId
+	@within Machine
+	@param id string -- The new unique identifier
+	@return boolean -- Whether setting the ID succeeded
+	Sets the unique identifier of the machine.
+]=]
 function Machine.SetId(self: Machine, id: string): boolean
 	self._Id = id
 	return true
 end
 
+--[=[
+	@method IsClientAuthoritative
+	@within Machine
+	@return boolean -- True if client-authoritative
+	Returns whether the state machine transitions are client-authoritative.
+]=]
 function Machine.IsClientAuthoritative(self: Machine): boolean
 	return self._ClientAuthoritative == true
 end
 
+--[=[
+	@method SetClientAuthoritative
+	@within Machine
+	@param is_client_authoritative boolean -- The new authoritative state
+	@return boolean
+	Sets whether the state machine transitions are client-authoritative.
+]=]
 function Machine.SetClientAuthoritative(self: Machine, is_client_authoritative: boolean): boolean
 	self._ClientAuthoritative = is_client_authoritative == true
 	return true
 end
 
+--[=[
+	@method SetInitial
+	@within Machine
+	@param state State -- The initial state
+	@return boolean -- Whether setting the initial state succeeded
+	Sets the initial starting state for the machine.
+]=]
 function Machine.SetInitial(self: Machine, state: State): boolean
 	if state == nil then
 		return false
@@ -140,14 +214,34 @@ function Machine.SetInitial(self: Machine, state: State): boolean
 	return true
 end
 
+--[=[
+	@method GetCurrent
+	@within Machine
+	@return State? -- The currently active state
+	Returns the currently active state of the machine.
+]=]
 function Machine.GetCurrent(self: Machine): State?
 	return self._Current
 end
 
+--[=[
+	@method IsRunning
+	@within Machine
+	@return boolean -- True if the machine is active and running
+	Returns whether the state machine is active and running.
+]=]
 function Machine.IsRunning(self: Machine): boolean
 	return self._Running
 end
 
+--[=[
+	@method Start
+	@within Machine
+	@param context any? -- Optional context data to pass to the initial state's Enter handler
+	@param source Player? -- Optional player context initiating the start
+	@return boolean -- Whether the state machine successfully started
+	Starts the state machine, entering the initial state.
+]=]
 function Machine.Start(self: Machine, context: any?, source: Player?): boolean
 	if self._Destroyed then
 		return false
@@ -169,6 +263,14 @@ function Machine.Start(self: Machine, context: any?, source: Player?): boolean
 	return ok
 end
 
+--[=[
+	@method Stop
+	@within Machine
+	@param context any? -- Optional context data to pass to state Exit handlers
+	@param source Player? -- Optional player context initiating the stop
+	@return boolean -- Whether the state machine successfully stopped
+	Stops the state machine, exiting the current active state and any active parent states.
+]=]
 function Machine.Stop(self: Machine, context: any?, source: Player?): boolean
 	if self._Destroyed then
 		return false
@@ -289,6 +391,16 @@ local function process_pending_transitions(self: Machine)
 	end)
 end
 
+--[=[
+	@method Transition
+	@within Machine
+	@param target State -- The target state to transition to
+	@param context any? -- Optional context data to pass to Exit/Enter handlers
+	@param source Player? -- Optional player context initiating the transition
+	@return boolean -- Whether the transition completed successfully (or was queued)
+	Initiates a transition to the target state. If a transition is already in progress,
+	this transition is enqueued to run sequentially.
+]=]
 function Machine.Transition(self: Machine, target: State, context: any?, source: Player?): boolean
 	if self._Destroyed then
 		return false
@@ -311,6 +423,13 @@ function Machine.Transition(self: Machine, target: State, context: any?, source:
 	return ok
 end
 
+--[=[
+	@method Update
+	@within Machine
+	@param dt number -- Delta time since last update
+	@param context any? -- Optional context data passed to state Update handlers
+	Updates the active state and its parent hierarchy by running their Update handlers.
+]=]
 function Machine.Update(self: Machine, dt: number, context: any?)
 	if self._Destroyed then
 		return
@@ -331,6 +450,12 @@ function Machine.Update(self: Machine, dt: number, context: any?)
 	end
 end
 
+--[=[
+	@method Destroy
+	@within Machine
+	@return boolean -- Whether the machine was successfully destroyed
+	Destroys the state machine, cleaning up all internal states, signals, and queues.
+]=]
 function Machine.Destroy(self: Machine): boolean
 	if self._Destroyed then
 		return false
@@ -361,6 +486,13 @@ function Machine.Destroy(self: Machine): boolean
 	return true
 end
 
+--[=[
+	@method Replicate
+	@within Machine
+	@param targets { any }? -- Optional replication targets (players or namespaces) on server
+	@return boolean -- Whether replication setup succeeded
+	Registers the machine for networking/replication.
+]=]
 function Machine.Replicate(self: Machine, targets: { any }?): boolean
 	if RunService:IsServer() then
 		return Server:Register(self, targets)
@@ -369,6 +501,12 @@ function Machine.Replicate(self: Machine, targets: { any }?): boolean
 	end
 end
 
+--[=[
+	@method Unreplicate
+	@within Machine
+	@return boolean -- Whether replication teardown succeeded
+	Unregisters the machine from replication.
+]=]
 function Machine.Unreplicate(self: Machine): boolean
 	if RunService:IsServer() then
 		return Server:Unregister(self)
@@ -377,6 +515,13 @@ function Machine.Unreplicate(self: Machine): boolean
 	end
 end
 
+--[=[
+	@method SetReplicationTargets
+	@within Machine
+	@param targets { any }? -- New replication targets (players or namespaces)
+	@return boolean -- Whether setting targets succeeded
+	Sets replication targets for the state machine (server-only).
+]=]
 function Machine.SetReplicationTargets(self: Machine, targets: { any }?): boolean
 	if RunService:IsServer() then
 		return Server:SetTargets(self, targets)
@@ -384,6 +529,13 @@ function Machine.SetReplicationTargets(self: Machine, targets: { any }?): boolea
 	return false
 end
 
+--[=[
+	@method SyncReplication
+	@within Machine
+	@param targets { any }? -- Optional sync target override
+	@return boolean -- Whether the sync succeeded
+	Manually syncs replication state.
+]=]
 function Machine.SyncReplication(self: Machine, targets: { any }?): boolean
 	if RunService:IsServer() then
 		return Server:Sync(self, targets)

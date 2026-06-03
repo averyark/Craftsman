@@ -10,6 +10,11 @@ const Signal = require("./Signal")
 
 local TAG_PREFIX = "__TAG_"
 
+--[=[
+	@class Tag
+	A replicated tagging system for Roblox Instances.
+	Tags are stored as individual `NumberValue` instances parented directly to target Instances, allowing them to automatically replicate across the network. Supports timed tags, custom tag attributes, and state listeners.
+]=]
 local TagModule = {}
 
 local TagClass = {}
@@ -18,11 +23,29 @@ TagClass.__tostring = function(self)
 	return self.Identifier
 end
 
-
+--[=[
+	@interface TagAttributes
+	@within Tag
+	A dictionary of custom attribute key-value pairs applied to a tag instance.
+]=]
 type TagAttributes = { [string]: any }
 type TagList = { Tag }
 type TagNameList = { string }
+
+--[=[
+	@type TagInput string | Tag | { Tag } | { string }
+	@within Tag
+	Represents the flexible tag lookup inputs accepted by tag checking methods.
+]=]
 type TagInput = string | Tag | TagList | TagNameList
+
+--[=[
+	@interface TagConnection
+	@within Tag
+	@field Disconnect (self: TagConnection) -> () -- Disconnects the tag state listener.
+	@field Destroy (self: TagConnection) -> () -- Alias for Disconnect.
+	A connection handle returned by tag change listeners.
+]=]
 type TagConnection = {
 	Disconnect: (self: TagConnection) -> (),
 	Destroy: (self: TagConnection) -> (),
@@ -30,6 +53,12 @@ type TagConnection = {
 
 local Tags: { [string]: Tag } = {}
 
+--[=[
+	@function create_tag_value
+	@within Tag
+	@private
+	@ignore
+]=]
 local function create_tag_value(
 	tag: Tag,
 	identifier: string,
@@ -58,6 +87,12 @@ local function create_tag_value(
 	return value_object
 end
 
+--[=[
+	@function resolve_tag_objects
+	@within Tag
+	@private
+	@ignore
+]=]
 local function resolve_tag_objects(check_tags: TagInput): TagList
 	local tag_objects: TagList = {}
 
@@ -99,6 +134,12 @@ local function resolve_tag_objects(check_tags: TagInput): TagList
 	return tag_objects
 end
 
+--[=[
+	@function create_listener_connection
+	@within Tag
+	@private
+	@ignore
+]=]
 local function create_listener_connection(cleanup: () -> ()): TagConnection
 	return {
 		Disconnect = function()
@@ -110,15 +151,52 @@ local function create_listener_connection(cleanup: () -> ()): TagConnection
 	}
 end
 
+--[=[
+	@function new
+	@within Tag
+	@param identifier string -- The unique name of the tag.
+	@return Tag -- The newly registered tag instance.
+	@tag constructor
+	Registers a new `Tag` with the specified unique identifier. Throws an error if a tag with this identifier is already registered.
+]=]
 local function new(identifier: string)
 	assert(Tags[identifier] == nil, `A tag with this name already exists: {identifier}`)
 
 	local self = setmetatable({}, TagClass)
 
+	--[=[
+		@prop Identifier string
+		@within Tag
+		The unique string identifier for this tag.
+	]=]
 	self.Identifier = identifier
+
+	--[=[
+		@prop Tagged { [string]: NumberValue }
+		@within Tag
+		Internal lookup of active NumberValue objects representing tag instances, keyed by tag ID.
+	]=]
 	self.Tagged = {}
+
+	--[=[
+		@prop OnTagged Signal<instance: Instance, id: string, duration: number?>
+		@within Tag
+		Fires when this tag is applied to a Roblox Instance.
+	]=]
 	self.OnTagged = Signal.new()
+
+	--[=[
+		@prop OnTagRemoved Signal<instance: Instance, id: string>
+		@within Tag
+		Fires when a specific tag ID is removed from a Roblox Instance.
+	]=]
 	self.OnTagRemoved = Signal.new()
+
+	--[=[
+		@prop OnInstanceTagged Signal<instance: Instance, is_tagged: boolean>
+		@within Tag
+		Fires with `true` when the first tag instance of this type is added to an Instance, and `false` when the last tag instance of this type is removed.
+	]=]
 	self.OnInstanceTagged = Signal.new()
 	self._TagCount = 0
 
@@ -129,6 +207,12 @@ end
 
 export type Tag = typeof(new(...))
 
+--[=[
+	@method _RegisterTag
+	@within Tag
+	@private
+	@ignore
+]=]
 function TagClass._RegisterTag(
 	self: Tag,
 	instance: Instance,
@@ -188,6 +272,14 @@ function TagClass._RegisterTag(
 	return identifier, value_object
 end
 
+--[=[
+	@method WhenTagRemoved
+	@within Tag
+	@param id string -- The tag ID to listen for.
+	@param callback () -> () -- The callback to invoke.
+	@return RBXScriptConnection -- The signal connection.
+	Registers a listener that fires once the specific tag instance ID is removed from an Instance.
+]=]
 function TagClass.WhenTagRemoved(self: Tag, id: string, callback: () -> ())
 	return self.OnTagRemoved:Connect(function(_, removed_id)
 		if removed_id == id then
@@ -196,6 +288,14 @@ function TagClass.WhenTagRemoved(self: Tag, id: string, callback: () -> ())
 	end)
 end
 
+--[=[
+	@method Remove
+	@within Tag
+	@param instance Instance? -- The Roblox Instance (optional if the tag is parented).
+	@param id string -- The unique tag ID.
+	@return boolean -- True if the tag was found and successfully removed.
+	Removes a specific tag instance by its ID. Destroys the corresponding Value object.
+]=]
 function TagClass.Remove(self: Tag, instance: Instance?, id: string): boolean
 	local tag_object = self.Tagged[id]
 	if not tag_object then
@@ -219,6 +319,14 @@ function TagClass.Remove(self: Tag, instance: Instance?, id: string): boolean
 	return true
 end
 
+--[=[
+	@method GetTagId
+	@within Tag
+	@param instance Instance -- The tagged Roblox Instance.
+	@param tag_object NumberValue -- The NumberValue tag object.
+	@return string? -- The tag instance ID, or nil if not found.
+	Retrieves the unique tag instance ID associated with a specific tag NumberValue object.
+]=]
 function TagClass.GetTagId(self: Tag, instance: Instance, tag_object: NumberValue): string?
 	for id, current_tag in self.Tagged do
 		if current_tag == tag_object then
@@ -229,6 +337,13 @@ function TagClass.GetTagId(self: Tag, instance: Instance, tag_object: NumberValu
 	return nil
 end
 
+--[=[
+	@method GetDuration
+	@within Tag
+	@param instance Instance -- The Roblox Instance to query.
+	@return number -- The total remaining duration (in seconds) of all timed tag instances of this type.
+	Calculates the total remaining time for all active timed tag instances on the Roblox Instance.
+]=]
 function TagClass.GetDuration(self: Tag, instance: Instance): number
 	local duration = 0
 
@@ -248,6 +363,13 @@ function TagClass.GetDuration(self: Tag, instance: Instance): number
 	return duration
 end
 
+--[=[
+	@method GetToggleTags
+	@within Tag
+	@param instance Instance -- The Roblox Instance to query.
+	@return number -- The count of active toggle tags.
+	Returns the count of active infinite-duration (toggle) tag instances on the given Roblox Instance.
+]=]
 function TagClass.GetToggleTags(self: Tag, instance: Instance): number
 	local count = 0
 
@@ -260,6 +382,13 @@ function TagClass.GetToggleTags(self: Tag, instance: Instance): number
 	return count
 end
 
+--[=[
+	@method RemoveAll
+	@within Tag
+	@param instance Instance -- The Roblox Instance to clear tags from.
+	@param check_func ((tag_object: NumberValue) -> boolean)? -- Optional filter callback.
+	Removes all tag instances of this type from the Roblox Instance.
+]=]
 function TagClass.RemoveAll(self: Tag, instance: Instance, check_func: ((tag_object: NumberValue) -> boolean)?)
 	local tag_ids = {}
 
@@ -280,7 +409,16 @@ function TagClass.RemoveAll(self: Tag, instance: Instance, check_func: ((tag_obj
 	end
 end
 
-
+--[=[
+	@method AddTag
+	@within Tag
+	@param instance Instance -- The Roblox Instance to tag.
+	@param interval number? -- Optional duration (in seconds) before the tag expires automatically.
+	@param attributes TagAttributes? -- Optional metadata attributes to attach to the tag.
+	@param overwrite_id string? -- Optional specific ID to overwrite.
+	@return NumberValue -- The created tag NumberValue object.
+	Applies this tag to the target Roblox Instance, returning the created NumberValue object.
+]=]
 function TagClass.AddTag(
 	self: Tag,
 	instance: Instance,
@@ -288,10 +426,19 @@ function TagClass.AddTag(
 	attributes: TagAttributes?,
 	overwrite_id: string?
 ): NumberValue
-	local _, value_object = self (instance, interval, attributes, overwrite_id)
+	local _, value_object = self(instance, interval, attributes, overwrite_id)
 	return value_object
 end
 
+--[=[
+	@method RemoveOthersAndAdd
+	@within Tag
+	@param instance Instance -- The Roblox Instance to tag.
+	@param interval number? -- Optional duration (in seconds).
+	@param attributes TagAttributes? -- Optional metadata attributes.
+	@return string -- The newly created tag instance ID.
+	Clears all other tag instances of this type on the Instance, then adds a new one and returns its tag ID.
+]=]
 function TagClass.RemoveOthersAndAdd(
 	self: Tag,
 	instance: Instance,
@@ -302,16 +449,41 @@ function TagClass.RemoveOthersAndAdd(
 	return self:Add(instance, interval, attributes)
 end
 
+--[=[
+	@method ReplaceTag
+	@within Tag
+	@param instance Instance -- The Roblox Instance to tag.
+	@param interval number? -- Optional duration.
+	@param attributes TagAttributes? -- Optional metadata attributes.
+	@return NumberValue -- The new tag NumberValue object.
+	Replaces all existing tag instances of this type on the Instance with a single new tag instance.
+]=]
 function TagClass.ReplaceTag(self: Tag, instance: Instance, interval: number?, attributes: TagAttributes?): NumberValue
 	self:RemoveAll(instance)
 	return self:AddTag(instance, interval, attributes)
 end
 
+--[=[
+	@method SetTag
+	@within Tag
+	@param instance Instance -- The Roblox Instance to tag.
+	@param interval number? -- Optional duration.
+	@param attributes TagAttributes? -- Optional metadata attributes.
+	@return NumberValue -- The new tag NumberValue object.
+	Alias for `ReplaceTag`. Replaces all existing tag instances of this type on the Instance with a single new tag instance.
+]=]
 function TagClass.SetTag(self: Tag, instance: Instance, interval: number?, attributes: TagAttributes?): NumberValue
 	self:RemoveAll(instance)
 	return self:AddTag(instance, interval, attributes)
 end
 
+--[=[
+	@method GetTags
+	@within Tag
+	@param instance Instance -- The Roblox Instance to query.
+	@return { NumberValue } -- An array of tag NumberValue objects parented to the Instance.
+	Retrieves all tag NumberValue objects of this type currently parented to the Roblox Instance.
+]=]
 function TagClass.GetTags(self: Tag, instance: Instance): { NumberValue }
 	local tagged = {}
 	local target_name = TAG_PREFIX .. self.Identifier
@@ -331,6 +503,14 @@ function TagClass.GetTags(self: Tag, instance: Instance): { NumberValue }
 	return tagged
 end
 
+--[=[
+	@method IsTagged
+	@within Tag
+	@param instance Instance -- The Roblox Instance to query.
+	@param only_local boolean? -- If true, only checks local/locally created tag cache instead of the Instance's children.
+	@return boolean -- True if the Instance is tagged with this tag.
+	Checks if the Roblox Instance currently has this tag.
+]=]
 function TagClass.IsTagged(self: Tag, instance: Instance, only_local: boolean?): boolean
 	if only_local then
 		for _, tag_object in self.Tagged do
@@ -345,6 +525,14 @@ function TagClass.IsTagged(self: Tag, instance: Instance, only_local: boolean?):
 	return instance:FindFirstChild(TAG_PREFIX .. self.Identifier) ~= nil
 end
 
+--[=[
+	@method ListenToInstance
+	@within Tag
+	@param instance Instance -- The Roblox Instance to listen to.
+	@param callback (is_tagged: boolean) -> () -- Invoked with the new tagged status.
+	@return TagConnection -- The connection handle to stop listening.
+	Listens to changes in the tagged status of the Roblox Instance (true when first tag is added, false when last tag is removed).
+]=]
 function TagClass.ListenToInstance(self: Tag, instance: Instance, callback: (boolean) -> ())
 	local current_tags = self:GetTags(instance)
 	local state = nil
@@ -425,6 +613,14 @@ function TagClass.ListenToInstance(self: Tag, instance: Instance, callback: (boo
 	return create_listener_connection(cleanup)
 end
 
+--[=[
+	@method ListenToInstanceTags
+	@within Tag
+	@param instance Instance -- The Roblox Instance to listen to.
+	@param callback (tag_object: NumberValue, is_added: boolean) -> () -- Invoked when a tag is added/removed.
+	@return TagConnection -- The connection handle to stop listening.
+	Listens to when individual tag instances of this type are added or removed from the Roblox Instance.
+]=]
 function TagClass.ListenToInstanceTags(self: Tag, instance: Instance, callback: (NumberValue, boolean) -> ())
 	local current_tags = self:GetTags(instance)
 
@@ -497,6 +693,11 @@ function TagClass.ListenToInstanceTags(self: Tag, instance: Instance, callback: 
 	return create_listener_connection(cleanup)
 end
 
+--[=[
+	@method Destroy
+	@within Tag
+	Cleans up and destroys the tag object, removing all active tag instances from instances and disposing of signals.
+]=]
 function TagClass.Destroy(self: Tag)
 	local tag_ids = {}
 
@@ -514,8 +715,18 @@ function TagClass.Destroy(self: Tag)
 	self.OnInstanceTagged:Destroy()
 end
 
+TagClass.__call = TagClass._RegisterTag
+TagClass.Add = TagClass._RegisterTag
+
 TagModule.new = new
 
+--[=[
+	@function Get
+	@within Tag
+	@param identifier string -- The tag name.
+	@return Tag -- The registered or newly created tag.
+	Retrieves an existing registered tag by its name, or registers a new one if it does not exist.
+]=]
 function TagModule.Get(identifier: string): Tag
 	if Tags[identifier] then
 		return Tags[identifier]
@@ -524,10 +735,25 @@ function TagModule.Get(identifier: string): Tag
 	return new(identifier)
 end
 
+--[=[
+	@function Is
+	@within Tag
+	@param value any -- The value to check.
+	@return boolean -- True if the value is a Tag object.
+	Checks if a given value is a valid `Tag` instance.
+]=]
 function TagModule.Is(value: any): boolean
 	return getmetatable(value) == TagClass
 end
 
+--[=[
+	@function HasTags
+	@within Tag
+	@param instance Instance -- The Roblox Instance to check.
+	@param check_tags TagInput -- The tag(s) to check for.
+	@return boolean -- True if the instance has any of the specified tags.
+	Checks if a Roblox Instance has any of the specified tags (accepts a single string tag name, Tag object, array of tag names, or array of Tag objects).
+]=]
 function TagModule.HasTags(instance: Instance, check_tags: TagInput): boolean
 	local tag_objects = resolve_tag_objects(check_tags)
 
@@ -540,6 +766,13 @@ function TagModule.HasTags(instance: Instance, check_tags: TagInput): boolean
 	return false
 end
 
+--[=[
+	@function GetTags
+	@within Tag
+	@param instance Instance -- The Roblox Instance to check.
+	@return { Tag } -- An array of Tag objects active on the instance.
+	Retrieves all registered `Tag` objects currently active on the Roblox Instance.
+]=]
 function TagModule.GetTags(instance: Instance): { Tag }
 	local tagged = {}
 
@@ -554,6 +787,12 @@ function TagModule.GetTags(instance: Instance): { Tag }
 	return tagged
 end
 
+--[=[
+	@function GetRegistered
+	@within Tag
+	@return { Tag } -- An array of all registered Tag objects.
+	Retrieves a list of all registered `Tag` objects.
+]=]
 function TagModule.GetRegistered(): { Tag }
 	local registered = {}
 

@@ -14,12 +14,27 @@ local Signal = require("../Signal")
 
 const Config = require("../Config")
 
+--[=[
+	@class MarketClient
+	The client-side module for handling monetization prompts and events.
+]=]
 local Market = {}
 
 local MarketConfig = Config.MARKET or {}
 local Started = false
 
+--[=[
+	@prop PromptStarted Signal<string, number, Player>
+	@within MarketClient
+	A signal that fires when a purchase prompt is shown on the client.
+]=]
 Market.PromptStarted = Signal.new()
+
+--[=[
+	@prop GamepassPromptFinished Signal<Player, number, boolean>
+	@within MarketClient
+	A signal that fires when a gamepass purchase prompt finishes.
+]=]
 Market.GamepassPromptFinished = Signal.new()
 
 local function get_local_player()
@@ -30,6 +45,11 @@ local function get_local_player()
 	return Players.LocalPlayer
 end
 
+--[=[
+	@method Init
+	@within MarketClient
+	Initializes the client-side Market service.
+]=]
 function Market:Init()
 	if Started then
 		return
@@ -38,6 +58,11 @@ function Market:Init()
 	Started = true
 end
 
+--[=[
+	@method Start
+	@within MarketClient
+	Starts the client-side Market service, listening to core MarketplaceService events.
+]=]
 function Market:Start()
 	if not RunService:IsClient() or MarketConfig.ENABLED == false or MarketConfig.AUTO_START_CLIENT == false then
 		return
@@ -50,6 +75,13 @@ function Market:Start()
 	end)
 end
 
+--[=[
+	@method PromptProduct
+	@within MarketClient
+	@param product_id number -- The ID of the developer product to prompt
+	@return boolean -- Whether the prompt was successfully initiated
+	Prompts the local player to buy a developer product.
+]=]
 function Market:PromptProduct(product_id)
 	local player = get_local_player()
 	if not player or type(product_id) ~= "number" then
@@ -61,6 +93,13 @@ function Market:PromptProduct(product_id)
 	return true
 end
 
+--[=[
+	@method PromptGamepass
+	@within MarketClient
+	@param gamepass_id number -- The ID of the gamepass to prompt
+	@return boolean -- Whether the prompt was successfully initiated
+	Prompts the local player to buy a gamepass.
+]=]
 function Market:PromptGamepass(gamepass_id)
 	local player = get_local_player()
 	if not player or type(gamepass_id) ~= "number" then

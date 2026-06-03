@@ -10,10 +10,42 @@ const Types = require("./Types")
 
 local StateModule = {}
 
+--[=[
+	@class State
+	A state node in a hierarchical state machine (HSM). States can have optional Enter, Exit, and Update callbacks,
+	and can be nested under a parent state.
+]=]
 local State = {}
 State.__index = State
 
 export type State = Types.State
+--[=[
+	@prop Name string
+	@within State
+	The unique name of the state.
+]=]
+
+--[=[
+	@prop Parent State?
+	@within State
+	The parent state under which this state is nested.
+]=]
+
+--[=[
+	@prop Children { [string]: State }
+	@within State
+	Map of child states registered under this state.
+]=]
+
+--[=[
+	@function new
+	@within State
+	@param name string -- The name of the state
+	@param handlers StateHandlers? -- Optional table of event handlers (Enter, Exit, Update)
+	@return State -- A new state instance
+	@tag constructor
+	Creates a new State instance.
+]=]
 local function new(name: string, handlers)
 	local resolved_handlers = (type(handlers) == "table" and handlers or {})
 
@@ -32,6 +64,13 @@ end
 
 export type StateInternal = typeof(new(...))
 
+--[=[
+	@method _SetParent
+	@private
+	@ignore
+	@within State
+	Sets the parent state of this state, updating children maps.
+]=]
 function State._SetParent(self: State, parent: State?): boolean
 	if self.Parent == parent then
 		return true
@@ -63,6 +102,13 @@ function State._SetParent(self: State, parent: State?): boolean
 	return true
 end
 
+--[=[
+	@method SetName
+	@within State
+	@param name string -- The new name of the state
+	@return boolean -- Whether setting the name succeeded
+	Sets the name of the state and updates parent children map entries if nested.
+]=]
 function State.SetName(self: State, name: string): boolean
 	if self.Name == name then
 		return true
@@ -79,6 +125,12 @@ function State.SetName(self: State, name: string): boolean
 	return true
 end
 
+--[=[
+	@method Enter
+	@within State
+	@param context any? -- Optional context data passed to the handler
+	Runs the state's Enter handler callback, if configured.
+]=]
 function State.Enter(self: State, context: any?)
 	local handler = self._OnEnter
 	if handler == nil then
@@ -88,6 +140,12 @@ function State.Enter(self: State, context: any?)
 	handler(self, context)
 end
 
+--[=[
+	@method Exit
+	@within State
+	@param context any? -- Optional context data passed to the handler
+	Runs the state's Exit handler callback, if configured.
+]=]
 function State.Exit(self: State, context: any?)
 	local handler = self._OnExit
 	if handler == nil then
@@ -97,6 +155,13 @@ function State.Exit(self: State, context: any?)
 	handler(self, context)
 end
 
+--[=[
+	@method Update
+	@within State
+	@param dt number -- Delta time since last update
+	@param context any? -- Optional context data passed to the handler
+	Runs the state's Update handler callback, if configured.
+]=]
 function State.Update(self: State, dt: number, context: any?)
 	local handler = self._OnUpdate
 	if handler == nil then

@@ -8,10 +8,11 @@
 
 const Repr = require("../Repr")
 
---[[
+--[=[
 	@class PrintUtil
 	A specialized printing and logging utility module designed for rich formatting, structured table output, and debugging assertions.
-]]--
+]=]
+--
 local PrintUtil = {}
 
 local DEFAULT_INTERNAL_PREFIX = "Craftsman"
@@ -77,10 +78,11 @@ local function wrap_text(str: string, max_len: number): { string }
 	return lines
 end
 
---[[
+--[=[
 	Outputs standard log messages prefixed by the caller module name.
 	@param ... any -- The arguments to print.
-]]--
+]=]
+--
 function PrintUtil:Print(...)
 	local args = { ... }
 	local formatted_args = {}
@@ -91,10 +93,11 @@ function PrintUtil:Print(...)
 	print(get_formatted_prefix_and_suffix(message))
 end
 
---[[
+--[=[
 	Outputs warnings prefixed by the caller module name, along with a stack traceback.
 	@param ... any -- The arguments to warn.
-]]--
+]=]
+--
 function PrintUtil:Warn(...)
 	local args = { ... }
 	local formatted_args = {}
@@ -105,10 +108,11 @@ function PrintUtil:Warn(...)
 	warn(get_formatted_prefix_and_suffix(message), debug.traceback("\n\n", 2))
 end
 
---[[
+--[=[
 	Throws an error prefixed by the caller module name.
 	@param ... any -- The error message parameters.
-]]--
+]=]
+--
 function PrintUtil:Error(...)
 	local args = { ... }
 	local formatted_args = {}
@@ -119,11 +123,12 @@ function PrintUtil:Error(...)
 	error(get_formatted_prefix_and_suffix(message))
 end
 
---[[
+--[=[
 	Asserts that a condition is true, otherwise throws a formatted error prefixed by the calling module name.
 	@param condition any -- The condition expression to assert.
 	@param ... any -- The error message parameters.
-]]--
+]=]
+--
 function PrintUtil:Assert(condition, ...)
 	if not condition then
 		local args = { ... }
@@ -136,13 +141,14 @@ function PrintUtil:Assert(condition, ...)
 	end
 end
 
---[[
+--[=[
 	Prints a beautifully formatted ASCII table representing row and column data with dynamic wrapping and borders.
 	@param title string -- The title header of the table.
 	@param columns { string | { name: string } } -- The headers or definitions for each column.
 	@param rows { { any } | { [string]: any } } -- The row data elements (can be arrays of values or dictionaries of fields).
 	@param max_width number? -- The maximum character width of each cell column before word wrapping occurs (defaults to 45).
-]]--
+]=]
+--
 function PrintUtil:ListPrint(title, columns, rows, max_width)
 	local title = title or ""
 	local columns = columns or {}
@@ -321,10 +327,11 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 	print_line(build_border("└", "┴", "┘"))
 end
 
---[[
+--[=[
 	Formats and lists the fields and values of a non-functional table/object into an ASCII grid layout.
 	@param object { [any]: any } -- The target table/object.
-]]--
+]=]
+--
 function PrintUtil:PrintObject(object)
 	local title = object.Name or object.ClassName or "Component"
 	local columns = { "Field", "Value" }

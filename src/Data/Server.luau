@@ -23,6 +23,12 @@ const PrintUtil = require("../Utilities/PrintUtil")
 
 export type PlayerState = Config.PlayerState
 
+--[=[
+	@class DataServer
+	The server-side Data module for Craftsman. It handles player session loading/saving,
+	reconciliation against schemas (via GreenTea), session locking, client replication,
+	and provides state producers for server-side state modification.
+]=]
 local Data = {}
 
 local DataConfig = Config.DATA or {}
@@ -261,6 +267,13 @@ end
 DefaultState = normalize_state(DataConfig.TEMPLATE)
 
 local RealLoadedSignal = Signal.new()
+
+--[=[
+	@prop Loaded Signal<Player, PlayerState>
+	@within DataServer
+	A signal that fires when a player's data is loaded and reconciled.
+	Supports standard Signal connection APIs (Connect, Once, Wait).
+]=]
 Data.Loaded = {
 	Connect = function(self, fn)
 		local conn = RealLoadedSignal:Connect(fn)
@@ -295,8 +308,19 @@ Data.Loaded = {
 	end,
 } :: Signal.Signal<Player, PlayerState>
 
+--[=[
+	@prop Saved Signal<Player, PlayerState>
+	@within DataServer
+	A signal that fires when a player's data is successfully saved to the DataStore.
+]=]
 Data.Saved = Signal.new() :: Signal.Signal<Player, PlayerState>
 
+--[=[
+	@method Init
+	@within DataServer
+	Initializes the server-side data store. Sets up the GreenTea validation schema
+	and constructs the DocumentStore object.
+]=]
 function Data:Init()
 	if DocumentStore then
 		return
@@ -352,14 +376,35 @@ function Data:Init()
 	Data.DefaultState = DefaultState
 end
 
+--[=[
+	@method GetPlayerRecord
+	@within DataServer
+	@param player Player -- The player instance
+	@return Record -- The internal record representing the player session status
+	Returns the internal record containing the Player's Document, Reflex Producer, and load status.
+]=]
 function Data:GetPlayerRecord(player: Player)
 	return get_record(player)
 end
 
+--[=[
+	@method GetProducer
+	@within DataServer
+	@param player Player -- The player instance
+	@return Producer -- The Reflex producer for this player
+	Gets the Reflex producer associated with the player.
+]=]
 function Data:GetProducer(player: Player)
 	return get_record(player).Producer
 end
 
+--[=[
+	@method GetState
+	@within DataServer
+	@param player Player -- The player instance
+	@return PlayerState -- The current player state, deep-cloned and frozen
+	Queries the current state of a player. Yields if the player's data is still loading.
+]=]
 function Data:GetState(player: Player)
 	local record = get_record(player)
 	if not record.Loaded and record.LoadPromise then
@@ -370,6 +415,14 @@ function Data:GetState(player: Player)
 	return normalize_state(record.Producer:getState())
 end
 
+--[=[
+	@method SetState
+	@within DataServer
+	@param player Player -- The player instance
+	@param next_state PlayerState -- The new state to set
+	@return PlayerState -- The updated state
+	Overwrites a player's state. Replicates changes to the client and caches them for saving.
+]=]
 function Data:SetState(player: Player, next_state)
 	local record = get_record(player)
 	local normalized_state = record.Producer.SetState(next_state)
@@ -382,6 +435,14 @@ function Data:SetState(player: Player, next_state)
 	return normalized_state
 end
 
+--[=[
+	@method UpdateState
+	@within DataServer
+	@param player Player -- The player instance
+	@param updater (state: PlayerState) -> PlayerState -- Function that transforms state
+	@return PlayerState -- The updated state
+	Updates a player's state using an updater function. Replicates changes to the client.
+]=]
 function Data:UpdateState(player: Player, updater)
 	local record = get_record(player)
 	local next_state = record.Producer.UpdateState(updater)
@@ -394,10 +455,24 @@ function Data:UpdateState(player: Player, updater)
 	return next_state
 end
 
+--[=[
+	@method ResetState
+	@within DataServer
+	@param player Player -- The player instance
+	@return PlayerState -- The reset state
+	Resets the player's state back to the default template state.
+]=]
 function Data:ResetState(player: Player)
 	return self:SetState(player, clone_template())
 end
 
+--[=[
+	@method LoadPlayer
+	@within DataServer
+	@param player Player -- The player instance
+	@return Promise<PlayerState> -- A promise resolving with the loaded state
+	Loads a player's document from the datastore, steals locks if needed, and syncs to the client.
+]=]
 function Data:LoadPlayer(player: Player)
 	local record = get_record(player)
 
@@ -435,6 +510,13 @@ function Data:LoadPlayer(player: Player)
 	return record.LoadPromise
 end
 
+--[=[
+	@method SavePlayer
+	@within DataServer
+	@param player Player -- The player instance
+	@return Promise<PlayerState?> -- A promise resolving with the saved state
+	Saves the player's current cached state to the datastore without closing the session.
+]=]
 function Data:SavePlayer(player: Player)
 	local record = PlayerRecords[player]
 	if not record then
@@ -452,6 +534,13 @@ function Data:SavePlayer(player: Player)
 	return create_save_promise(player, record, false)
 end
 
+--[=[
+	@method ClosePlayer
+	@within DataServer
+	@param player Player -- The player instance
+	@return Promise<nil> -- A promise resolving when closed
+	Closes the player's session, releases session locks, and saves current state.
+]=]
 function Data:ClosePlayer(player: Player)
 	local record = PlayerRecords[player]
 	if not record then
@@ -477,10 +566,22 @@ function Data:ClosePlayer(player: Player)
 	return create_save_promise(player, record, true)
 end
 
+--[=[
+	@method RemovePlayer
+	@within DataServer
+	@param player Player -- The player instance
+	@return Promise<nil>
+	Alias for ClosePlayer.
+]=]
 function Data:RemovePlayer(player: Player)
 	return self:ClosePlayer(player)
 end
 
+--[=[
+	@method Shutdown
+	@within DataServer
+	Closes all active player sessions during a game shutdown. Runs synchronously.
+]=]
 function Data:Shutdown()
 	if DataConfig.ENABLED == false then
 		return
@@ -514,6 +615,12 @@ function Data:Shutdown()
 	end
 end
 
+--[=[
+	@method Start
+	@within DataServer
+	Starts the server-side Data service, hooking up PlayerAdded/PlayerRemoving connections
+	and BindToClose callbacks.
+]=]
 function Data:Start()
 	if not RunService:IsServer() or DataConfig.ENABLED == false or DataConfig.AUTO_START_SERVER == false then
 		return

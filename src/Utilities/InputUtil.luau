@@ -8,57 +8,66 @@ local Signal = require("../Signal")
 
 local InputStore = require("../Store/InputStore")
 
---[[
+--[=[
 	@class InputUtil
 	A centralized, stateless input management utility designed for action bindings, movement vectors, and device-type tracking.
-]]--
+]=]
+--
 local InputUtil = {}
 
 local ActionBindings = {}
 local ActiveActions = {}
 
---[[
+--[=[
 	@prop Began Signal -- Fired when a bound action begins.
-]]--
+	@within InputUtil
+]=]
+--
 InputUtil.Began = Signal.new()
 
---[[
+--[=[
 	@prop Ended Signal -- Fired when a bound action ends.
-]]--
+	@within InputUtil
+]=]
+--
 InputUtil.Ended = Signal.new()
 
---[[
+--[=[
 	Binds a high-frequency action name to a set of KeyCodes or UserInputTypes.
 	@param action_name string -- The name of the action.
 	@param key_array { Enum.KeyCode | Enum.UserInputType } -- The list of inputs that trigger this action.
-]]--
+]=]
+--
 function InputUtil.BindAction(action_name, key_array)
 	ActionBindings[action_name] = key_array
 	ActiveActions[action_name] = false
 end
 
---[[
+--[=[
 	Unbinds an action from all registered inputs.
 	@param action_name string -- The name of the action to unbind.
-]]--
+]=]
+--
 function InputUtil.UnbindAction(action_name)
 	ActionBindings[action_name] = nil
 	ActiveActions[action_name] = nil
 end
 
---[[
+--[=[
 	Checks if a specified action is currently active/held.
 	@param action_name string -- The name of the action.
 	@return boolean -- `true` if the action is currently active, `false` otherwise.
-]]--
+]=]
+--
 function InputUtil.IsActionActive(action_name)
 	return ActiveActions[action_name] or false
 end
 
---[[
+--[=[
 	Calculates the normalized WASD and left analog stick thumbstick movement vector.
 	@return Vector3 -- The unit movement vector along the XZ plane.
-]]--
+]=]
+--
 function InputUtil.GetMovementVector()
 	local movement_vector = Vector3.zero
 
@@ -91,10 +100,11 @@ function InputUtil.GetMovementVector()
 	return movement_vector
 end
 
---[[
+--[=[
 	Retrieves the camera movement delta from UserInputService.
 	@return Vector2 -- The mouse or touch camera movement delta.
-]]--
+]=]
+--
 function InputUtil.GetCameraDelta()
 	return UserInputService:GetMouseDelta()
 end

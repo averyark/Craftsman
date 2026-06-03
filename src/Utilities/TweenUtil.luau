@@ -12,10 +12,11 @@ const Promise = require("../../../../Promise")
 const Spr = require("../../../../Spr")
 const PrintUtil = require("./PrintUtil")
 
---[[
+--[=[
 	@class TweenUtil
 	A unified tweening utility that caches reusable animation templates and supports both Roblox TweenService and Spr spring physics.
-]]--
+]=]
+--
 local TweenUtil = {}
 
 type EasingStyle = Enum.EasingStyle
@@ -25,7 +26,7 @@ type PromiseLike = typeof(Promise.new(function() end))
 local TweenTemplates = {}
 local ActiveStandardTweens = setmetatable({}, { __mode = "k" })
 
---[[
+--[=[
 	Registers a reusable animation template. Supports standard TweenService or Spr spring configurations.
 	@param name string -- The name key for this template.
 	@param style_or_type any -- EasingStyle (e.g. Quad), or "Spring" to use physics.
@@ -33,7 +34,8 @@ local ActiveStandardTweens = setmetatable({}, { __mode = "k" })
 	@param duration_or_damping number? -- Optional duration (for tweens) or damping ratio (for springs).
 	@param direction_or_frequency any? -- Optional EasingDirection (for tweens) or undamped angular frequency (for springs).
 	@return { [string]: any } -- The registered configuration dictionary.
-]]--
+]=]
+--
 function TweenUtil.new(
 	name: string,
 	style_or_type: any,
@@ -62,12 +64,13 @@ function TweenUtil.new(
 	return config
 end
 
---[[
+--[=[
 	Plays a registered template on the specified instance with unified standard tween and spring deduplication.
 	@param name string -- The template name to play.
 	@param instance Instance -- The target Roblox instance to animate.
 	@return Tween? -- The created Roblox Tween object (if standard tween), or nil (if spring).
-]]--
+]=]
+--
 function TweenUtil.Play(name: string, instance: Instance): Tween
 	local template = TweenTemplates[name]
 	if not template then
@@ -146,12 +149,13 @@ function TweenUtil.Play(name: string, instance: Instance): Tween
 	return tween
 end
 
---[[
+--[=[
 	Plays a registered template asynchronously, returning a Promise that resolves when standard tween finishes or spring settles.
 	@param name string -- The template name.
 	@param instance Instance -- The target Roblox instance.
 	@return Promise -- A promise that resolves when the animation finishes.
-]]--
+]=]
+--
 function TweenUtil.PlayAsync(name: string, instance: Instance): PromiseLike
 	local template = TweenTemplates[name]
 	if not template then
@@ -207,13 +211,14 @@ function TweenUtil.PlayAsync(name: string, instance: Instance): PromiseLike
 	end)
 end
 
---[[
+--[=[
 	Snaps target properties to starting values instantly, then plays the template to animate them to target state.
 	@param name string -- The template name.
 	@param instance Instance -- The target Roblox instance.
 	@param start_properties { [string]: any } -- Starting property overrides to snap to first.
 	@return Tween? -- The created standard Tween object, or nil if spring.
-]]--
+]=]
+--
 function TweenUtil.PlayFrom(name: string, instance: Instance, start_properties: { [string]: any }): Tween?
 	for prop, start_value in start_properties do
 		instance[prop] = start_value
@@ -221,13 +226,14 @@ function TweenUtil.PlayFrom(name: string, instance: Instance, start_properties: 
 	return TweenUtil.Play(name, instance)
 end
 
---[[
+--[=[
 	Snaps target properties instantly, then returns a Promise resolving when the template animation completes.
 	@param name string -- The template name.
 	@param instance Instance -- The target Roblox instance.
 	@param start_properties { [string]: any } -- Starting property overrides to snap to first.
 	@return Promise -- A promise resolving when the animation completes.
-]]--
+]=]
+--
 function TweenUtil.PlayFromAsync(name: string, instance: Instance, start_properties: { [string]: any }): PromiseLike
 	for prop, start_value in start_properties do
 		instance[prop] = start_value
@@ -235,11 +241,12 @@ function TweenUtil.PlayFromAsync(name: string, instance: Instance, start_propert
 	return TweenUtil.PlayAsync(name, instance)
 end
 
---[[
+--[=[
 	Stops any active spring and cancels any active standard tweens driving specified instance properties.
 	@param instance Instance -- The target instance.
 	@param property string? -- Optional specific property. If omitted, stops all animations on this instance.
-]]--
+]=]
+--
 function TweenUtil.Stop(instance: Instance, property: string?)
 	if property then
 		Spr.stop(instance, property)
