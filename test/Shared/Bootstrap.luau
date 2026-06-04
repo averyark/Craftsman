@@ -16,17 +16,6 @@ require("@game/ReplicatedStorage/CraftsmanConfig")
 
 local Bootstrap = {}
 
-function Bootstrap.AddPlayer(player)
-	Craftsman.Player.new(player)
-
-	player.CharacterAdded:Connect(function(character)
-		Craftsman.Entity.new(character, player)
-	end)
-
-	if player.Character then
-		Craftsman.Entity.new(player.Character, player)
-	end
-end
 
 function Bootstrap:Start(modules: Instance?)
 	if RunService:IsClient() then
@@ -41,12 +30,6 @@ function Bootstrap:Start(modules: Instance?)
 
 	if modules then
 		Craftsman.Component:LoadModulesAsync(modules):await()
-	end
-
-	Players.PlayerAdded:Connect(self.AddPlayer)
-
-	for _, player in Players:GetPlayers() do
-		pcall(self.AddPlayer, player)
 	end
 end
 

@@ -8,8 +8,6 @@ local MarketServer = nil
 local MarketClient = require("@self/Market/Client")
 local StateMachineServer = nil
 local StateMachineClient = require("@self/StateMachine/Client")
-const Entity = require("@self/Entity")
-const Player = require("@self/Player")
 const Queue = require("@self/Queue")
 const StringUtil = require("@self/Utilities/StringUtil")
 const AnimationUtil = require("@self/Utilities/AnimationUtil")
@@ -37,8 +35,6 @@ const WorldUtil = require("@self/Utilities/WorldUtil")
 
 local Craftsman = {
 	Component = Component, -- Module Loader
-	Player = Player, -- Player Management
-	Entity = Entity, -- Character & Entity Management
 	Queue = Queue, -- Task Queue System,
 	State = State, -- State Machine State
 	Machine = Machine, -- State Machine

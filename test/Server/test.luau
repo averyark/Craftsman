@@ -1,4 +1,5 @@
 --!nonstrict
+const Players = game:GetService("Players")
 --[[
     FileName    > test.luau
     Author      > AveryArk
@@ -84,15 +85,8 @@ Craftsman.DataServer.Saved:Connect(function(player, data)
 	Craftsman.PrintUtil:PrintObject(data)
 end)
 
-Craftsman.Player.Loaded:Connect(function(player)
-	Craftsman.PrintUtil:PrintObject(player)
-end)
 
-Craftsman.Entity.Spawned:Connect(function(entity)
-	Craftsman.PrintUtil:PrintObject(entity)
-end)
-
-Craftsman.Player.Removing:Connect(function(player)
+Players.PlayerRemoving:Connect(function(player)
 	LoadedPlayers[player] = nil
 end)
 

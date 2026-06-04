@@ -66,7 +66,7 @@ function test:Start()
 		assert(part.Transparency == 0.25, "Should immediately snap to starting value")
 		task.wait(0.1)
 
-		assert(part.Transparency == 1, "Should successfully complete animation to 1")
+		assert(part.Transparency == 1, "Should successfully complete animation to 1. Actual: " .. tostring(part.Transparency))
 		part:Destroy()
 	end)
 

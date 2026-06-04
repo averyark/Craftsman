@@ -12,7 +12,6 @@ local Config = {
 		STORE_NAME = "CraftsmanData",
 		TEMPLATE = {
 			Receipts = {},
-			Permissions = {},
 		},
 		SCHEMA = nil,
 		BRIDGE_FOLDER_NAME = "CraftsmanDataBridge",
