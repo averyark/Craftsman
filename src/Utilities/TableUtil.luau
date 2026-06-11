@@ -39,7 +39,7 @@ function TableUtil.DeepClone<T>(value: T, seen: { [any]: any }?): T
 	seen_table[value] = clone
 
 	for key, child in value :: any do
-		clone[TableUtil.DeepClone(key, seen_table)] = TableUtil.DeepClone(child, seen_table)
+		clone[TableUtil.DeepClone(key, seen_table :: any)] = TableUtil.DeepClone(child, seen_table)
 	end
 
 	return clone :: any

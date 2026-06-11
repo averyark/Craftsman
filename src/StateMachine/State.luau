@@ -54,9 +54,9 @@ local function new(name: string, handlers)
 	self.Name = name
 	self.Parent = nil
 	self.Children = {}
-	self._OnEnter = resolved_handlers.Enter
-	self._OnExit = resolved_handlers.Exit
-	self._OnUpdate = resolved_handlers.Update
+	self.OnEnter = resolved_handlers.Enter
+	self.OnExit = resolved_handlers.Exit
+	self.OnUpdate = resolved_handlers.Update
 	self._ChildKey = nil
 
 	return self
@@ -132,7 +132,7 @@ end
 	Runs the state's Enter handler callback, if configured.
 ]=]
 function State.Enter(self: State, context: any?)
-	local handler = self._OnEnter
+	local handler = self.OnEnter
 	if handler == nil then
 		return
 	end
@@ -147,7 +147,7 @@ end
 	Runs the state's Exit handler callback, if configured.
 ]=]
 function State.Exit(self: State, context: any?)
-	local handler = self._OnExit
+	local handler = self.OnExit
 	if handler == nil then
 		return
 	end
@@ -163,7 +163,7 @@ end
 	Runs the state's Update handler callback, if configured.
 ]=]
 function State.Update(self: State, dt: number, context: any?)
-	local handler = self._OnUpdate
+	local handler = self.OnUpdate
 	if handler == nil then
 		return
 	end

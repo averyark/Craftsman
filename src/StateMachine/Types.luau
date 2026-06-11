@@ -10,9 +10,9 @@ export type State = {
 	Name: string,
 	Parent: State?,
 	Children: { [string]: State },
-	_OnEnter: ((state: State, context: any) -> ())?,
-	_OnExit: ((state: State, context: any) -> ())?,
-	_OnUpdate: ((state: State, dt: number, context: any) -> ())?,
+	OnEnter: ((state: State, context: any) -> ())?,
+	OnExit: ((state: State, context: any) -> ())?,
+	OnUpdate: ((state: State, dt: number, context: any) -> ())?,
 	_ChildKey: string?,
 
 	SetName: (self: State, name: string) -> boolean,

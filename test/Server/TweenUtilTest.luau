@@ -66,7 +66,10 @@ function test:Start()
 		assert(part.Transparency == 0.25, "Should immediately snap to starting value")
 		task.wait(0.1)
 
-		assert(part.Transparency == 1, "Should successfully complete animation to 1. Actual: " .. tostring(part.Transparency))
+		assert(
+			part.Transparency == 1,
+			"Should successfully complete animation to 1. Actual: " .. tostring(part.Transparency)
+		)
 		part:Destroy()
 	end)
 
@@ -89,7 +92,8 @@ function test:Start()
 		part.Parent = workspace
 
 		local resolved = false
-		Craftsman.TweenUtil.PlayAsync("PartFade", part)
+		Craftsman.TweenUtil
+			.PlayAsync("PartFade", part)
 			:andThen(function()
 				resolved = true
 			end)
@@ -106,7 +110,8 @@ function test:Start()
 		part.Parent = workspace
 
 		local resolved = false
-		Craftsman.TweenUtil.PlayAsync("PartFadeSpring", part)
+		Craftsman.TweenUtil
+			.PlayAsync("PartFadeSpring", part)
 			:andThen(function()
 				resolved = true
 			end)
@@ -129,7 +134,10 @@ function test:Start()
 		-- Play a new overlapping tween
 		local tween2 = Craftsman.TweenUtil.Play("PartFade", part)
 
-		assert(tween1.PlaybackState == Enum.PlaybackState.Cancelled, "First tween should be cancelled by overlapping property")
+		assert(
+			tween1.PlaybackState == Enum.PlaybackState.Cancelled,
+			"First tween should be cancelled by overlapping property"
+		)
 		task.wait(0.1)
 		assert(part.Transparency == 1, "Second tween should complete successfully")
 		part:Destroy()
@@ -149,6 +157,141 @@ function test:Start()
 		task.wait(0.1)
 
 		assert(part.Transparency == 1, "Tween should take over and successfully drive transparency to 1")
+		part:Destroy()
+	end)
+
+	run_case(results, "Tween nested children recursively works", function()
+		local parent = Instance.new("Frame")
+		local shadow = Instance.new("Frame")
+		shadow.Name = "Shadow"
+		shadow.Parent = parent
+		local uiScale = Instance.new("UIScale")
+		uiScale.Name = "UIScale"
+		uiScale.Parent = shadow
+
+		parent.BackgroundTransparency = 0
+		shadow.BackgroundTransparency = 0
+		uiScale.Scale = 1.0
+
+		Craftsman.TweenUtil.new("NestedChildrenTest", Enum.EasingStyle.Linear, {
+			BackgroundTransparency = 1,
+			Shadow = {
+				BackgroundTransparency = 1,
+				UIScale = {
+					Scale = 1.5,
+				},
+			},
+		}, 0.05)
+
+		local tween = Craftsman.TweenUtil.Play("NestedChildrenTest", parent)
+		assert(tween ~= nil, "Should return a valid Tween / tween group object")
+		task.wait(0.1)
+
+		assert(parent.BackgroundTransparency == 1, "Parent background transparency should be 1")
+		assert(shadow.BackgroundTransparency == 1, "Shadow background transparency should be 1")
+		assert(uiScale.Scale == 1.5, "UIScale scale should be 1.5")
+		parent:Destroy()
+	end)
+
+	run_case(results, "PlayFrom snaps nested properties recursively", function()
+		local parent = Instance.new("Frame")
+		local shadow = Instance.new("Frame")
+		shadow.Name = "Shadow"
+		shadow.Parent = parent
+		local uiScale = Instance.new("UIScale")
+		uiScale.Name = "UIScale"
+		uiScale.Parent = shadow
+
+		parent.BackgroundTransparency = 0
+		shadow.BackgroundTransparency = 0
+		uiScale.Scale = 1.0
+
+		local tween = Craftsman.TweenUtil.PlayFrom("NestedChildrenTest", parent, {
+			BackgroundTransparency = 0.5,
+			Shadow = {
+				BackgroundTransparency = 0.5,
+				UIScale = {
+					Scale = 1.2,
+				},
+			},
+		})
+		assert(parent.BackgroundTransparency == 0.5, "Parent should immediately snap to 0.5")
+		assert(shadow.BackgroundTransparency == 0.5, "Shadow should immediately snap to 0.5")
+		assert(uiScale.Scale == 1.2, "UIScale should immediately snap to 1.2")
+
+		task.wait(0.1)
+		assert(parent.BackgroundTransparency == 1, "Parent should animate to 1")
+		assert(shadow.BackgroundTransparency == 1, "Shadow should animate to 1")
+		assert(uiScale.Scale == 1.5, "UIScale should animate to 1.5")
+		parent:Destroy()
+	end)
+
+	run_case(results, "TweenUtil.Stop cancels nested children tweens recursively", function()
+		local parent = Instance.new("Frame")
+		local shadow = Instance.new("Frame")
+		shadow.Name = "Shadow"
+		shadow.Parent = parent
+		local uiScale = Instance.new("UIScale")
+		uiScale.Name = "UIScale"
+		uiScale.Parent = shadow
+
+		parent.BackgroundTransparency = 0
+		shadow.BackgroundTransparency = 0
+		uiScale.Scale = 1.0
+
+		Craftsman.TweenUtil.new("LongNestedTest", Enum.EasingStyle.Linear, {
+			BackgroundTransparency = 1,
+			Shadow = {
+				BackgroundTransparency = 1,
+				UIScale = {
+					Scale = 1.5,
+				},
+			},
+		}, 1.0)
+
+		local tween = Craftsman.TweenUtil.Play("LongNestedTest", parent)
+		task.wait(0.1)
+
+		Craftsman.TweenUtil.Stop(parent)
+
+		local val_parent = parent.BackgroundTransparency
+		local val_shadow = shadow.BackgroundTransparency
+		local val_scale = uiScale.Scale
+
+		task.wait(0.1)
+		assert(parent.BackgroundTransparency == val_parent, "Parent should be stopped")
+		assert(shadow.BackgroundTransparency == val_shadow, "Shadow should be stopped")
+		assert(uiScale.Scale == val_scale, "UIScale should be stopped")
+		parent:Destroy()
+	end)
+
+	run_case(results, "QuickPlay plays animation immediately with dynamic parameter sorting", function()
+		local part = Instance.new("Part")
+		part.Transparency = 0
+		part.Parent = workspace
+
+		local tween1 = Craftsman.TweenUtil.QuickPlay(
+			part,
+			{ Transparency = 0.5 },
+			0.05,
+			Enum.EasingStyle.Linear,
+			Enum.EasingDirection.Out
+		)
+		assert(tween1 ~= nil, "QuickPlay should return a valid Tween object")
+		task.wait(0.08)
+		assert(part.Transparency == 0.5, "Part transparency should animate to 0.5")
+
+		local tween2 = Craftsman.TweenUtil.QuickPlay(
+			part,
+			0.05,
+			Enum.EasingStyle.Linear,
+			Enum.EasingDirection.Out,
+			{ Transparency = 1.0 }
+		)
+		assert(tween2 ~= nil, "QuickPlay should return a valid Tween object")
+		task.wait(0.08)
+		assert(part.Transparency == 1.0, "Part transparency should animate to 1.0")
+
 		part:Destroy()
 	end)
 

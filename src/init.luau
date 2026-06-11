@@ -27,6 +27,8 @@ end
 
 const ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+const Entity = require("@self/Entity")
+
 local StateMachine = require("@self/StateMachine")
 local Machine = require("@self/StateMachine/Machine")
 
@@ -38,6 +40,8 @@ local Craftsman = {
 	Queue = Queue, -- Task Queue System,
 	State = State, -- State Machine State
 	Machine = Machine, -- State Machine
+
+	Entity = Entity,
 
 	DataServer = DataServer, -- Server Data Manipulation
 	DataClient = DataClient, -- Client Data Access

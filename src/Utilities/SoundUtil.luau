@@ -263,7 +263,7 @@ export type SoundPlayer = typeof(new(...))
 function SoundPlayer.Load(
 	self: SoundPlayer,
 	param: {
-		SoundName: string,
+		SoundName: string?,
 		SoundId: string?,
 		FromRegistry: string?
 	} & SoundProperties
@@ -279,17 +279,20 @@ function SoundPlayer.Load(
 		clone = clone:Clone()
 		--
 
+		clone.Name = param.SoundName or param.FromRegistry
 		clone.Parent = self.Container
-		self.SoundCache[param.SoundName] = clone
+		self.SoundCache[param.SoundName or param.FromRegistry] = clone
 
 		apply_properties(clone, param)
 		return clone
 	end
 	--
 
+	assert(param.SoundId and param.SoundName, "Expected SoundId and SoundName")
+
 	--
 	local sound = Instance.new("Sound")
-	sound.Name = param.SoundName
+	sound.Name = param.SoundName or "UnnamedSound"
 	sound.SoundId = param.SoundId
 	sound.Parent = self.Container
 	--
@@ -313,20 +316,18 @@ end
 
 function SoundPlayer.Play(
 	self: SoundPlayer,
-	param: {
-		SoundName: string,
-		SoundId: string?,
-
+	sound_name: string,
+	param: ({
 		PlayDuplicate: boolean?,
-	} & SoundProperties
+	} & SoundProperties)?
 )
-	if not self.SoundCache[param.SoundName] then
-		PrintUtil:Error("SoundPlayer.Play: Sound '" .. param.SoundName .. "' has not been loaded. Please load the sound before playing.", 2)
+	if not self.SoundCache[sound_name] or sound_name == nil then
+		PrintUtil:Error("SoundPlayer.Play: Sound '" .. tostring(sound_name) .. "' has not been loaded. Please load the sound before playing.", 2)
 	end
 
-	local sound = self.SoundCache[param.SoundName]
+	local sound = self.SoundCache[sound_name]
 
-	if param.PlayDuplicate then
+	if param and param.PlayDuplicate then
 		sound = sound:Clone()
 		sound.Parent = self.Container
 

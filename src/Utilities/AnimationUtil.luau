@@ -117,8 +117,8 @@ export type Animate = typeof(new(...))
 function Animate.Load(
 	self: Animate,
 	param: {
-		AnimationName: string,
-		AnimationId: string,
+		AnimationName: string?,
+		AnimationId: string?,
 		FromRegistry: string?,
 	} & AnimationProperties
 ): AnimationTrack
@@ -133,17 +133,21 @@ function Animate.Load(
 		clone = clone:Clone()
 		--
 
+		clone.Name = param.AnimationName or param.FromRegistry
+
 		local track = self.Container:LoadAnimation(clone)
 
-		self.AnimationCache[param.AnimationName] = clone
-		self.Tracks[param.AnimationName] = track
+		self.AnimationCache[param.AnimationName or param.FromRegistry] = clone
+		self.Tracks[param.AnimationName or param.FromRegistry] = track
 		return track
 	end
 	--
 
+	assert(param.AnimationId and param.AnimationName, "Expected AnimationId and AnimationName")
+
 	--
 	local animation = Instance.new("Animation")
-	animation.Name = param.AnimationName
+	animation.Name = param.AnimationName or "UnnamedAnimation"
 	animation.AnimationId = param.AnimationId
 	--
 
