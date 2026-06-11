@@ -71,20 +71,41 @@ end
 local function create_mock_completed_event()
 	local connections = {}
 	local event = {}
+
 	function event:Connect(callback)
 		table.insert(connections, callback)
-		return {
-			Disconnect = function()
-				local index = table.find(connections, callback)
-				if index then
-					table.remove(connections, index)
-				end
-			end,
-		}
+		local connection = {}
+		function connection:Disconnect()
+			local index = table.find(connections, callback)
+			if index then
+				table.remove(connections, index)
+			end
+		end
+		return connection
 	end
+
+	function event:Once(callback)
+		local connection
+		connection = event:Connect(function(...)
+			connection:Disconnect()
+			callback(...)
+		end)
+		return connection
+	end
+
+	function event:Wait()
+		local running = coroutine.running()
+		local connection
+		connection = event:Connect(function(...)
+			connection:Disconnect()
+			task.spawn(running, ...)
+		end)
+		return coroutine.yield()
+	end
+
 	return event,
 		function(playback_state)
-			for _, callback in ipairs(connections) do
+			for _, callback in connections do
 				task.spawn(callback, playback_state)
 			end
 		end
@@ -115,7 +136,7 @@ local function create_tween_group(tweens: { Tween })
 	end
 
 	local connections = {}
-	for _, tw in ipairs(tweens) do
+	for _, tw in tweens do
 		local conn
 		conn = tw.Completed:Connect(function(state)
 			conn:Disconnect()
@@ -125,7 +146,7 @@ local function create_tween_group(tweens: { Tween })
 	end
 
 	function self:Play()
-		for _, tw in ipairs(tweens) do
+		for _, tw in tweens do
 			tw:Play()
 		end
 	end
@@ -135,17 +156,17 @@ local function create_tween_group(tweens: { Tween })
 			return
 		end
 		self.PlaybackState = Enum.PlaybackState.Cancelled
-		for _, conn in ipairs(connections) do
+		for _, conn in connections do
 			conn:Disconnect()
 		end
-		for _, tw in ipairs(tweens) do
+		for _, tw in tweens do
 			tw:Cancel()
 		end
 		fire_completed(Enum.PlaybackState.Cancelled)
 	end
 
 	function self:Pause()
-		for _, tw in ipairs(tweens) do
+		for _, tw in tweens do
 			tw:Pause()
 		end
 	end
@@ -214,7 +235,7 @@ function TweenUtil.Play(name: string, instance: Instance): Tween
 		local anim_instance = anim.Instance
 		local anim_properties = anim.Properties
 
-		for property_name in anim_properties do
+		for property_name, property_value in anim_properties do
 			Spr.stop(anim_instance, property_name)
 
 			local inst_tbl = ActiveStandardTweens[anim_instance]
@@ -227,7 +248,7 @@ function TweenUtil.Play(name: string, instance: Instance): Tween
 		end
 	end
 
-	for existing_tween in active_tweens_to_cancel do
+	for existing_tween, _ in active_tweens_to_cancel do
 		existing_tween:Cancel()
 		for inst, prop_tbl in ActiveStandardTweens do
 			for prop, tw in prop_tbl do
@@ -260,7 +281,7 @@ function TweenUtil.Play(name: string, instance: Instance): Tween
 			ActiveStandardTweens[anim.Instance] = inst_tbl
 		end
 
-		for property_name in anim.Properties do
+		for property_name, property_value in anim.Properties do
 			inst_tbl[property_name] = tween
 		end
 
@@ -272,7 +293,7 @@ function TweenUtil.Play(name: string, instance: Instance): Tween
 				return
 			end
 
-			for property_name in anim.Properties do
+			for property_name, property_value in anim.Properties do
 				if current_inst_tbl[property_name] ~= tween then
 					continue
 				end
@@ -421,7 +442,7 @@ function TweenUtil.Stop(instance: Instance, property: string?)
 		end
 
 		local keys_to_stop = {}
-		for active_inst in ActiveStandardTweens do
+		for active_inst, inst_tbl in ActiveStandardTweens do
 			local is_descendant = false
 			pcall(function()
 				is_descendant = active_inst == instance or active_inst:IsDescendantOf(instance)
@@ -464,7 +485,7 @@ function TweenUtil.QuickPlay(instance: Instance, ...): Tween
 	local style: any?
 	local direction: any?
 
-	for _, arg in ipairs(args) do
+	for _, arg in args do
 		if type(arg) == "number" then
 			duration = arg
 		elseif type(arg) == "table" then

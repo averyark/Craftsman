@@ -295,6 +295,34 @@ function test:Start()
 		part:Destroy()
 	end)
 
+	run_case(results, "tween_group completed event Once and Wait works", function()
+		local parent = Instance.new("Frame")
+		local shadow = Instance.new("Frame")
+		shadow.Name = "Shadow"
+		shadow.Parent = parent
+		local uiScale = Instance.new("UIScale")
+		uiScale.Name = "UIScale"
+		uiScale.Parent = shadow
+
+		parent.BackgroundTransparency = 0
+		shadow.BackgroundTransparency = 0
+		uiScale.Scale = 1.0
+
+		local tween = Craftsman.TweenUtil.Play("NestedChildrenTest", parent)
+		assert(tween ~= nil, "Should return a valid tween group object")
+
+		local once_fired = false
+		tween.Completed:Once(function(state)
+			once_fired = true
+		end)
+
+		local state = tween.Completed:Wait()
+		assert(state == Enum.PlaybackState.Completed, "Wait should return the playback state")
+		assert(once_fired == true, "Once connection should have fired")
+
+		parent:Destroy()
+	end)
+
 	Craftsman.PrintUtil:ListPrint("TweenUtil Template & Spring Test Results", { "Case", "Status", "Message" }, results)
 end
 
