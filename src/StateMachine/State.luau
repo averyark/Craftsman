@@ -171,6 +171,6 @@ function State.Update(self: State, dt: number, context: any?)
 	handler(self, dt, context)
 end
 
-StateModule.new = new :: <State>(name: string, handlers: Types.StateHandlers<State>?) -> State
+StateModule.new = new :: <Context>(name: string, handlers: Types.StateHandlers<Context>?) -> State
 
 return StateModule
