@@ -19,6 +19,7 @@ const TableUti = require("@self/Utilities/TableUtil")
 const TweenUtil = require("@self/Utilities/TweenUtil")
 const Tag = require("@self/Tag")
 const Debounce = require("@self/Debounce")
+const Concurrency = require("@self/Concurrency")
 
 if RunService:IsServer() then
 	DataServer = require("@self/Data/Server")
@@ -39,6 +40,7 @@ const WorldUtil = require("@self/Utilities/WorldUtil")
 local Craftsman = {
 	Component = Component, -- Module Loader
 	Debounce = Debounce, -- Debouncing and Throttling
+	Concurrency = Concurrency, -- Keyed Concurrency Control (AsyncLock & KeyedDebounce)
 	Queue = Queue, -- Task Queue System,
 	State = State, -- State Machine State
 	Machine = Machine, -- State Machine
