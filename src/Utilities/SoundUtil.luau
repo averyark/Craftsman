@@ -6,9 +6,13 @@
     Created     > 20/05/2026
 --]]
 
+const ContentProvider = game:GetService("ContentProvider")
+const RunService = game:GetService("RunService")
 const SoundService = game:GetService("SoundService")
 
+const Promise = require("../../../../Promise")
 const PrintUtil = require("./PrintUtil")
+const TableUtil = require("./TableUtil")
 
 local SoundUtil = {}
 
@@ -213,23 +217,50 @@ function SoundUtil.QuickPlay(param: {
 	return sound
 end
 
-function SoundUtil.Register(sound_name: string, sound_id: string, properties: SoundProperties?)
+function SoundUtil.Register(sound_name: string, sound_id: string, properties: SoundProperties?, should_preload: boolean?)
+	--
 	local sound = Instance.new("Sound")
 	sound.Name = sound_name
 	sound.SoundId = sound_id
 	sound.Parent = SoundService
 
 	apply_properties(sound, properties)
+	--
 
 	GlobalSoundRegistry[sound_name] = sound
+
+	--
+	if should_preload and RunService:IsClient() then
+		Promise.try(function()
+			ContentProvider:PreloadAsync({ sound })
+		end):catch(function(err)
+			PrintUtil:Warn("Failed to preload sound '" .. sound_name .. "': " .. tostring(err), 2)
+		end)
+	end
+	--
+
 	return sound
 end
 
-function SoundUtil.BulkRegister(sounds: { [string]: { SoundId: string } & SoundProperties })
+function SoundUtil.BulkRegister(sounds: { [string]: { SoundId: string } & SoundProperties }, should_preload: boolean?)
 	local registered_sounds = {}
+
+	--
 	for sound_name, data in sounds do
 		registered_sounds[sound_name] = SoundUtil.Register(sound_name, data.SoundId, data)
 	end
+	--
+
+	--
+	if should_preload and RunService:IsClient() then
+		Promise.try(function()
+			ContentProvider:PreloadAsync(TableUtil.Values(registered_sounds))
+		end):catch(function(err)
+			PrintUtil:Warn("Failed to preload sounds: " .. tostring(err), 2)
+		end)
+	end
+	--
+
 	return registered_sounds
 end
 
@@ -265,7 +296,8 @@ function SoundPlayer.Load(
 	param: {
 		SoundName: string?,
 		SoundId: string?,
-		FromRegistry: string?
+		FromRegistry: string?,
+		ShouldPreload: boolean?,
 	} & SoundProperties
 )
 	--
@@ -284,6 +316,17 @@ function SoundPlayer.Load(
 		self.SoundCache[param.SoundName or param.FromRegistry] = clone
 
 		apply_properties(clone, param)
+
+		--
+		if param.ShouldPreload and RunService:IsClient() then
+			Promise.try(function()
+				ContentProvider:PreloadAsync({ clone })
+			end):catch(function(err)
+				PrintUtil:Warn("Failed to preload sound '" .. (param.SoundName or param.FromRegistry) .. "': " .. tostring(err), 2)
+			end)
+		end
+		--
+
 		return clone
 	end
 	--
@@ -300,6 +343,17 @@ function SoundPlayer.Load(
 	apply_properties(sound, param)
 
 	self.SoundCache[param.SoundName] = sound
+
+	--
+	if param.ShouldPreload and RunService:IsClient() then
+		Promise.try(function()
+			ContentProvider:PreloadAsync({ sound })
+		end):catch(function(err)
+			PrintUtil:Warn("Failed to preload sound '" .. (param.SoundName or param.FromRegistry) .. "': " .. tostring(err), 2)
+		end)
+	end
+	--
+
 	return sound
 end
 

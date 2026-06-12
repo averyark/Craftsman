@@ -6,9 +6,13 @@
     Created     > 20/05/2026
 --]]
 
+const ContentProvider = game:GetService("ContentProvider")
 const Players = game:GetService("Players")
+const RunService = game:GetService("RunService")
 
+const Promise = require("../../../../Promise")
 const PrintUtil = require("./PrintUtil")
+const TableUtil = require("./TableUtil")
 
 --[=[
 	@class AnimationUtil
@@ -68,21 +72,42 @@ function AnimationUtil.QuickPlay(
 	return track
 end
 
-function AnimationUtil.Register(animation_name: string, animation_id: string, properties: AnimationProperties?)
+function AnimationUtil.Register(animation_name: string, animation_id: string, properties: AnimationProperties?, should_preload: boolean?)
 	--
 	local animation = Instance.new("Animation")
 	animation.Name = animation_name
 	animation.AnimationId = animation_id
 	--
+
 	GlobalAnimationRegistry[animation_name] = animation
+
+	--
+	if should_preload and RunService:IsClient() then
+		Promise.try(function()
+			ContentProvider:PreloadAsync({ animation })
+		end):catch(function(err)
+			PrintUtil:Warn("Failed to preload animation '" .. animation_name .. "': " .. tostring(err), 2)
+		end)
+	end
+	--
+
 	return animation
 end
 
-function AnimationUtil.BulkRegister(animations: { [string]: { AnimationId: string } & AnimationProperties })
+function AnimationUtil.BulkRegister(animations: { [string]: { AnimationId: string } & AnimationProperties }, should_preload: boolean?)
 	local registered_animations = {}
 	for animation_name, data in animations do
 		registered_animations[animation_name] = AnimationUtil.Register(animation_name, data.AnimationId, data)
 	end
+
+	if should_preload and RunService:IsClient() then
+		Promise.try(function()
+			ContentProvider:PreloadAsync(TableUtil.Values(registered_animations))
+		end):catch(function(err)
+			PrintUtil:Warn("Failed to preload animations: " .. tostring(err), 2)
+		end)
+	end
+
 	return registered_animations
 end
 
@@ -120,6 +145,7 @@ function Animate.Load(
 		AnimationName: string?,
 		AnimationId: string?,
 		FromRegistry: string?,
+		ShouldPreload: boolean?,
 	} & AnimationProperties
 ): AnimationTrack
 	--
@@ -139,6 +165,17 @@ function Animate.Load(
 
 		self.AnimationCache[param.AnimationName or param.FromRegistry] = clone
 		self.Tracks[param.AnimationName or param.FromRegistry] = track
+
+		--
+		if param.ShouldPreload and RunService:IsClient() then
+			Promise.try(function()
+				ContentProvider:PreloadAsync({ clone })
+			end):catch(function(err)
+				PrintUtil:Warn("Failed to preload animation '" .. (param.AnimationName or param.FromRegistry) .. "': " .. tostring(err), 2)
+			end)
+		end
+		--
+
 		return track
 	end
 	--
@@ -157,6 +194,17 @@ function Animate.Load(
 	self.AnimationCache[param.AnimationName] = animation
 	self.Tracks[param.AnimationName] = track
 	--
+
+	--
+	if param.ShouldPreload and RunService:IsClient() then
+		Promise.try(function()
+			ContentProvider:PreloadAsync({ animation })
+		end):catch(function(err)
+			PrintUtil:Warn("Failed to preload animation '" .. (param.AnimationName or param.FromRegistry) .. "': " .. tostring(err), 2)
+		end)
+	end
+	--
+
 	return track
 end
 
