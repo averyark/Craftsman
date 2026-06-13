@@ -24,55 +24,54 @@ EntityModule.Died = Signal.new()
 EntityModule.Removing = Signal.new()
 
 local function new(entity: Instance, player: Player?)
-    PrintUtil:Assert(
-        entity:IsA("Model"),
-        "Invalid entity."
-    )
+	PrintUtil:Assert(entity:IsA("Model"), "Invalid entity.")
 
-    if EntityModule.Entities[entity] then
-        return EntityModule.Entities[entity]
-    end
+	if EntityModule.Entities[entity] then
+		return EntityModule.Entities[entity]
+	end
 
-    local self = setmetatable({}, Entity)
+	local self = setmetatable({}, Entity)
 
-    self.Instance = entity
-    self.Player = player or Players:GetPlayerFromCharacter(self.Instance)
-    self.Humanoid = entity:WaitForChild("Humanoid")
-    self.HumanoidRootPart = entity:WaitForChild("HumanoidRootPart")
-    self.Keeper = Keeper.new()
+	self.Instance = entity
+	self.Player = player or Players:GetPlayerFromCharacter(self.Instance)
+	self.Humanoid = entity:WaitForChild("Humanoid")
+	self.HumanoidRootPart = entity:WaitForChild("HumanoidRootPart")
+	self.Keeper = Keeper.new()
 
-    EntityModule.Entities[entity] = self
-    self.Keeper:Add(function()
-        EntityModule.Entities[entity] = nil
-    end)
+	EntityModule.Entities[entity] = self
+	self.Keeper:Add(function()
+		EntityModule.Entities[entity] = nil
+	end)
 
-    entity.AncestryChanged:Connect(function()
-        if entity:IsDescendantOf(game) then return end
-        EntityModule.Died:Fire(self)
-        self.Keeper:Destroy()
-    end)
+	entity.AncestryChanged:Connect(function()
+		if entity:IsDescendantOf(game) then
+			return
+		end
+		EntityModule.Died:Fire(self)
+		self.Keeper:Destroy()
+	end)
 
-    EntityModule.Spawned:Fire(self)
+	EntityModule.Spawned:Fire(self)
 
-    self.Humanoid.Died:Connect(function()
-        EntityModule.Died:Fire(self)
-        self.Keeper:Destroy()
-    end)
+	self.Humanoid.Died:Connect(function()
+		EntityModule.Died:Fire(self)
+		self.Keeper:Destroy()
+	end)
 
-    return self
+	return self
 end
 
 function Entity:Destroy()
-    EntityModule.Removing:Fire(self)
+	EntityModule.Removing:Fire(self)
 
-    self.Instance:Destroy()
-    EntityModule.Entities[self.Instance] = nil
+	self.Instance:Destroy()
+	EntityModule.Entities[self.Instance] = nil
 end
 
 export type Entity = typeof(new(...))
 
 function EntityModule.Get(character): Entity?
-    return EntityModule.Entities[character] or new(character)
+	return EntityModule.Entities[character] or new(character)
 end
 
 EntityModule.new = new

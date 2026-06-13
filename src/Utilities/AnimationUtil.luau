@@ -72,7 +72,12 @@ function AnimationUtil.QuickPlay(
 	return track
 end
 
-function AnimationUtil.Register(animation_name: string, animation_id: string, properties: AnimationProperties?, should_preload: boolean?)
+function AnimationUtil.Register(
+	animation_name: string,
+	animation_id: string,
+	properties: AnimationProperties?,
+	should_preload: boolean?
+)
 	--
 	local animation = Instance.new("Animation")
 	animation.Name = animation_name
@@ -94,7 +99,10 @@ function AnimationUtil.Register(animation_name: string, animation_id: string, pr
 	return animation
 end
 
-function AnimationUtil.BulkRegister(animations: { [string]: { AnimationId: string } & AnimationProperties }, should_preload: boolean?)
+function AnimationUtil.BulkRegister(
+	animations: { [string]: { AnimationId: string } & AnimationProperties },
+	should_preload: boolean?
+)
 	local registered_animations = {}
 	for animation_name, data in animations do
 		registered_animations[animation_name] = AnimationUtil.Register(animation_name, data.AnimationId, data)
@@ -114,7 +122,10 @@ end
 function AnimationUtil.Unregister(animation_name: string)
 	local animation_id = GlobalAnimationRegistry[animation_name]
 	if not animation_id then
-		PrintUtil:Error("AnimationUtil.Unregister: No animation found in registry with name '" .. animation_name .. "'.", 2)
+		PrintUtil:Error(
+			"AnimationUtil.Unregister: No animation found in registry with name '" .. animation_name .. "'.",
+			2
+		)
 	end
 
 	GlobalAnimationRegistry[animation_name] = nil
@@ -124,9 +135,7 @@ end
 local Animate = {}
 Animate.__index = Animate
 
-local function new(
-	container: Animator | Humanoid | Model | AnimationController
-)
+local function new(container: Animator | Humanoid | Model | AnimationController)
 	local self = setmetatable({}, Animate)
 
 	self.Container = container
@@ -171,7 +180,13 @@ function Animate.Load(
 			Promise.try(function()
 				ContentProvider:PreloadAsync({ clone })
 			end):catch(function(err)
-				PrintUtil:Warn("Failed to preload animation '" .. (param.AnimationName or param.FromRegistry) .. "': " .. tostring(err), 2)
+				PrintUtil:Warn(
+					"Failed to preload animation '"
+						.. (param.AnimationName or param.FromRegistry)
+						.. "': "
+						.. tostring(err),
+					2
+				)
 			end)
 		end
 		--
@@ -200,7 +215,10 @@ function Animate.Load(
 		Promise.try(function()
 			ContentProvider:PreloadAsync({ animation })
 		end):catch(function(err)
-			PrintUtil:Warn("Failed to preload animation '" .. (param.AnimationName or param.FromRegistry) .. "': " .. tostring(err), 2)
+			PrintUtil:Warn(
+				"Failed to preload animation '" .. (param.AnimationName or param.FromRegistry) .. "': " .. tostring(err),
+				2
+			)
 		end)
 	end
 	--
@@ -240,11 +258,7 @@ function Animate.Play(self: Animate, animation_name: string, properties: Animati
 	local safe_properties = properties or {}
 
 	--
-	track:Play(
-		safe_properties.FadeTime,
-		safe_properties.Weight,
-		safe_properties.Speed
-	)
+	track:Play(safe_properties.FadeTime, safe_properties.Weight, safe_properties.Speed)
 	--
 
 	--

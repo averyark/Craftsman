@@ -7,3 +7,5 @@ Wally = "UpliftGames/Wally@0.3.2"
 stylua = "johnnymorganz/stylua@2.5.2"
 rojo = "rojo-rbx/rojo@7.6.1"
 wally-package-types = "JohnnyMorganz/wally-package-types@1.6.2"
+luau = "luau-lang/luau@0.628.0"  
+ 

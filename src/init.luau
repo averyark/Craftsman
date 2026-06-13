@@ -17,7 +17,7 @@ const InputUtil = require("@self/Utilities/InputUtil")
 const MathUtil = require("@self/Utilities/MathUtil")
 const PrintUtil = require("@self/Utilities/PrintUtil")
 const SoundUtil = require("@self/Utilities/SoundUtil")
-const TableUti = require("@self/Utilities/TableUtil")
+const TableUtil = require("@self/Utilities/TableUtil")
 const TweenUtil = require("@self/Utilities/TweenUtil")
 const Tag = require("@self/Tag")
 const Debounce = require("@self/Debounce")
@@ -64,7 +64,7 @@ local Craftsman = {
 
 	InputUtil = InputUtil, -- User Input Handling
 	PrintUtil = PrintUtil, -- Debugging and Printing
-	TableUtil = TableUti, -- Table Manipulation Utilities
+	TableUtil = TableUtil, -- Table Manipulation Utilities
 	WorldUtil = WorldUtil, -- World and Instance Utilities
 
 	AnimationUtil = AnimationUtil, -- Animation Handling
@@ -111,7 +111,10 @@ if custom_config_instance and custom_config_instance:IsA("ModuleScript") then
 			or custom_config.STATE_MACHINE ~= nil
 			or custom_config.MODULE_LOAD_ORDER ~= nil
 		then
-			Config:Edit(custom_config)
+			local merged = TableUtil.DeepMerge(Config, custom_config)
+			for k, v in merged do
+				(Config :: any)[k] = v
+			end
 		end
 	end
 end

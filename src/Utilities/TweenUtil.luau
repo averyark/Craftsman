@@ -475,10 +475,11 @@ end
 	- QuickPlay(instance, properties, duration?, style?, direction?)
 	- QuickPlay(instance, duration?, style?, direction?, properties)
 	@param instance Instance -- The target Roblox instance.
+	@param ... any -- Additional optional parameters (duration, style, direction, properties).
 	@return Tween? -- The created Tween object (or tween group), or nil.
 ]=]
 --
-function TweenUtil.QuickPlay(instance: Instance, ...): Tween
+function TweenUtil.QuickPlay(instance: Instance, ...: any): Tween
 	local args = { ... }
 	local properties: { [string]: any }?
 	local duration: number?

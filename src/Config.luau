@@ -15,15 +15,12 @@ local Config = {
 		},
 		SCHEMA = nil,
 		BRIDGE_FOLDER_NAME = "CraftsmanDataBridge",
-		STATE_EVENT_NAME = "StateUpdated",
-		REQUEST_FUNCTION_NAME = "RequestState",
 		AUTO_CREATE_BRIDGE = true,
 		AUTO_START_SERVER = true,
 		AUTO_START_CLIENT = true,
 		LOAD_EXISTING_PLAYERS = true,
 		LOAD_ON_PLAYER_ADDED = true,
 		SAVE_ON_PLAYER_REMOVING = true,
-		SYNC_CLIENT = true,
 		LOCK_SESSIONS = true,
 		BIND_TO_CLOSE = true,
 		OPEN_ATTEMPTS = 2,
@@ -83,8 +80,11 @@ local function deep_merge(...: { [any]: any }): { [any]: any }
 
 		for key, value in source do
 			-- Only recurse into plain tables; treat opaque objects as atomic values.
-			if type(value) == "table" and getmetatable(value) == nil
-				and type(merged[key]) == "table" and getmetatable(merged[key]) == nil
+			if
+				type(value) == "table"
+				and getmetatable(value) == nil
+				and type(merged[key]) == "table"
+				and getmetatable(merged[key]) == nil
 			then
 				merged[key] = deep_merge(merged[key], value)
 			elseif type(value) == "table" and getmetatable(value) == nil then
@@ -111,15 +111,12 @@ export type ConfigEditType = {
 		TEMPLATE: PlayerState?,
 		SCHEMA: any?,
 		BRIDGE_FOLDER_NAME: string?,
-		STATE_EVENT_NAME: string?,
-		REQUEST_FUNCTION_NAME: string?,
 		AUTO_CREATE_BRIDGE: boolean?,
 		AUTO_START_SERVER: boolean?,
 		AUTO_START_CLIENT: boolean?,
 		LOAD_EXISTING_PLAYERS: boolean?,
 		LOAD_ON_PLAYER_ADDED: boolean?,
 		SAVE_ON_PLAYER_REMOVING: boolean?,
-		SYNC_CLIENT: boolean?,
 		LOCK_SESSIONS: boolean?,
 		BIND_TO_CLOSE: boolean?,
 		OPEN_ATTEMPTS: number?,
@@ -149,15 +146,12 @@ export type ConfigModule = {
 		TEMPLATE: PlayerState,
 		SCHEMA: any?,
 		BRIDGE_FOLDER_NAME: string,
-		STATE_EVENT_NAME: string,
-		REQUEST_FUNCTION_NAME: string,
 		AUTO_CREATE_BRIDGE: boolean,
 		AUTO_START_SERVER: boolean,
 		AUTO_START_CLIENT: boolean,
 		LOAD_EXISTING_PLAYERS: boolean,
 		LOAD_ON_PLAYER_ADDED: boolean,
 		SAVE_ON_PLAYER_REMOVING: boolean,
-		SYNC_CLIENT: boolean,
 		LOCK_SESSIONS: boolean,
 		BIND_TO_CLOSE: boolean,
 		OPEN_ATTEMPTS: number,
@@ -178,12 +172,7 @@ export type ConfigModule = {
 		SYNC_CLIENT: boolean,
 	},
 	MODULE_LOAD_ORDER: { [any]: any },
-	Edit: (self: ConfigModule, changes: ConfigEditType) -> (),
 }
-
-function Config:Edit(changes: ConfigEditType)
-	Config = deep_merge(Config, changes)
-end
 
 Config = deep_merge(Config, CraftsmanConfig)
 

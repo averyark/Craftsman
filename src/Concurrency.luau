@@ -8,9 +8,6 @@
 
 const Concurrency = {}
 
---------------------------------------------------------------------------------
--- AsyncLock (Yield-Aware Lock)
---------------------------------------------------------------------------------
 local AsyncLock = {}
 AsyncLock.__index = AsyncLock
 
@@ -51,9 +48,6 @@ end
 
 AsyncLock.new = new_async_lock
 
---------------------------------------------------------------------------------
--- KeyedDebounce (Time-Aware Rate Limiter)
---------------------------------------------------------------------------------
 local KeyedDebounce = {}
 KeyedDebounce.__index = KeyedDebounce
 

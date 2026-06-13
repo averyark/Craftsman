@@ -14,6 +14,11 @@ const Promise = require("../../../../Promise")
 const PrintUtil = require("./PrintUtil")
 const TableUtil = require("./TableUtil")
 
+--[=[
+	@class SoundUtil
+	A comprehensive utility for managing, preloading, and playing Sound and SoundGroup instances.
+]=]
+--
 local SoundUtil = {}
 
 type SoundProperties = {
@@ -79,7 +84,9 @@ function SoundUtil.AddSoundGroup(sound_group_or_name: string | SoundGroup): Soun
 
 	local name = sound_group_or_name
 	local cached = SoundGroupCache[name]
-	if cached then return cached end
+	if cached then
+		return cached
+	end
 
 	local existing = SoundService:FindFirstChild(name)
 	if existing and existing:IsA("SoundGroup") then
@@ -174,7 +181,9 @@ function SoundUtil.QuickPlay(param: {
 	sound.SoundId = GlobalSoundRegistry[param.SoundName] or param.SoundId
 	sound.Name = param.SoundName
 
-	local sound_group = if typeof(param.SoundGroup) == "string" then SoundUtil.GetSoundGroup(param.SoundGroup) else param.SoundGroup
+	local sound_group = if typeof(param.SoundGroup) == "string"
+		then SoundUtil.GetSoundGroup(param.SoundGroup)
+		else param.SoundGroup
 
 	if sound_group then
 		sound.SoundGroup = sound_group
@@ -217,7 +226,12 @@ function SoundUtil.QuickPlay(param: {
 	return sound
 end
 
-function SoundUtil.Register(sound_name: string, sound_id: string, properties: SoundProperties?, should_preload: boolean?)
+function SoundUtil.Register(
+	sound_name: string,
+	sound_id: string,
+	properties: SoundProperties?,
+	should_preload: boolean?
+)
 	--
 	local sound = Instance.new("Sound")
 	sound.Name = sound_name
@@ -278,9 +292,7 @@ end
 local SoundPlayer = {}
 SoundPlayer.__index = SoundPlayer
 
-local function new(
-	container: Instance
-)
+local function new(container: Instance)
 	local self = setmetatable({}, SoundPlayer)
 
 	self.Container = container
@@ -322,7 +334,10 @@ function SoundPlayer.Load(
 			Promise.try(function()
 				ContentProvider:PreloadAsync({ clone })
 			end):catch(function(err)
-				PrintUtil:Warn("Failed to preload sound '" .. (param.SoundName or param.FromRegistry) .. "': " .. tostring(err), 2)
+				PrintUtil:Warn(
+					"Failed to preload sound '" .. (param.SoundName or param.FromRegistry) .. "': " .. tostring(err),
+					2
+				)
 			end)
 		end
 		--
@@ -349,7 +364,10 @@ function SoundPlayer.Load(
 		Promise.try(function()
 			ContentProvider:PreloadAsync({ sound })
 		end):catch(function(err)
-			PrintUtil:Warn("Failed to preload sound '" .. (param.SoundName or param.FromRegistry) .. "': " .. tostring(err), 2)
+			PrintUtil:Warn(
+				"Failed to preload sound '" .. (param.SoundName or param.FromRegistry) .. "': " .. tostring(err),
+				2
+			)
 		end)
 	end
 	--
@@ -376,7 +394,12 @@ function SoundPlayer.Play(
 	} & SoundProperties)?
 )
 	if not self.SoundCache[sound_name] or sound_name == nil then
-		PrintUtil:Error("SoundPlayer.Play: Sound '" .. tostring(sound_name) .. "' has not been loaded. Please load the sound before playing.", 2)
+		PrintUtil:Error(
+			"SoundPlayer.Play: Sound '"
+				.. tostring(sound_name)
+				.. "' has not been loaded. Please load the sound before playing.",
+			2
+		)
 	end
 
 	local sound = self.SoundCache[sound_name]
@@ -397,7 +420,10 @@ end
 
 function SoundPlayer.Stop(self: SoundPlayer, sound_name: string)
 	if not self.SoundCache[sound_name] then
-		PrintUtil:Error("SoundPlayer.Stop: Sound '" .. sound_name .. "' has not been loaded. Please load the sound before stopping.", 2)
+		PrintUtil:Error(
+			"SoundPlayer.Stop: Sound '" .. sound_name .. "' has not been loaded. Please load the sound before stopping.",
+			2
+		)
 	end
 
 	local sound = self.SoundCache[sound_name]
@@ -407,7 +433,10 @@ end
 
 function SoundPlayer.Pause(self: SoundPlayer, sound_name: string)
 	if not self.SoundCache[sound_name] then
-		PrintUtil:Error("SoundPlayer.Pause: Sound '" .. sound_name .. "' has not been loaded. Please load the sound before pausing.", 2)
+		PrintUtil:Error(
+			"SoundPlayer.Pause: Sound '" .. sound_name .. "' has not been loaded. Please load the sound before pausing.",
+			2
+		)
 	end
 
 	local sound = self.SoundCache[sound_name]
@@ -417,7 +446,12 @@ end
 
 function SoundPlayer.Resume(self: SoundPlayer, sound_name: string)
 	if not self.SoundCache[sound_name] then
-		PrintUtil:Error("SoundPlayer.Resume: Sound '" .. sound_name .. "' has not been loaded. Please load the sound before resuming.", 2)
+		PrintUtil:Error(
+			"SoundPlayer.Resume: Sound '"
+				.. sound_name
+				.. "' has not been loaded. Please load the sound before resuming.",
+			2
+		)
 	end
 
 	local sound = self.SoundCache[sound_name]

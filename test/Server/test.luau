@@ -1,5 +1,4 @@
 --!nonstrict
-const Players = game:GetService("Players")
 --[[
     FileName    > test.luau
     Author      > AveryArk
@@ -7,8 +6,11 @@ const Players = game:GetService("Players")
     Created     > 22/05/2026
 --]]
 
+const Players = game:GetService("Players")
+
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
 const CraftsmanConfig = require("@game/ReplicatedStorage/CraftsmanConfig")
+const PlayerData = require("@game/ReplicatedStorage/Shared/PlayerData")
 
 local test = Craftsman.Component.new({})
 
@@ -18,25 +20,25 @@ test.Start = function()
 	Craftsman.PrintUtil:Print("Test component started!")
 
 	-- Register Developer Product purchase handlers
-	Craftsman.MarketServer:RegisterHandler("Add100Coins", function(player, state, definition, context)
-		local new_state = Craftsman.TableUtil.DeepClone(state)
-		new_state.Coins = (new_state.Coins or 0) + 100
-
-		return new_state
-	end)
-
-	Craftsman.MarketServer:RegisterHandler("Add1000Coins", function(player, state, definition, context)
-		local new_state = Craftsman.TableUtil.DeepClone(state)
-		new_state.Coins = "TEST"
-		return new_state
-	end)
-
-	-- Register Gamepass purchase handlers (Global ownership handled by Roblox)
-	Craftsman.MarketServer:RegisterHandler("Multiply10Coins", function(player, state, definition, context)
+	Craftsman.MarketServer:RegisterHandler("Add100Coins", function(player, definition, context)
+		warn(player, definition, context)
+		PlayerData.AddCoins(player, 100)
 		return true
 	end)
 
-	Craftsman.MarketServer:RegisterHandler("Multiply2Coins", function(player, state, definition, context)
+	Craftsman.MarketServer:RegisterHandler("Add1000Coins", function(player, definition, context)
+		-- Deliberately introducing bad logic for testing schema validation
+		warn(player, definition, context)
+		PlayerData.SetCoins(player, "TEST" :: any)
+		return true
+	end)
+
+	-- Register Gamepass purchase handlers (Global ownership handled by Roblox)
+	Craftsman.MarketServer:RegisterHandler("Multiply10Coins", function(player, definition, context)
+		return true
+	end)
+
+	Craftsman.MarketServer:RegisterHandler("Multiply2Coins", function(player, definition, context)
 		return true
 	end)
 
@@ -64,11 +66,7 @@ test.Start = function()
 					` Awarding {amount_to_add} coins to player {player.Name} (base: {base_coins}, multiplier: {multiplier})`
 				)
 
-				Craftsman.DataServer:UpdateState(player, function(state)
-					local new_state = Craftsman.TableUtil.DeepClone(state)
-					new_state.Coins = (new_state.Coins or 0) + amount_to_add
-					return new_state
-				end)
+				PlayerData.AddCoins(player, amount_to_add)
 			end
 		end
 	end)
@@ -84,7 +82,6 @@ Craftsman.DataServer.Saved:Connect(function(player, data)
 	Craftsman.PrintUtil:Print("Data saved for player " .. player.Name)
 	Craftsman.PrintUtil:PrintObject(data)
 end)
-
 
 Players.PlayerRemoving:Connect(function(player)
 	LoadedPlayers[player] = nil

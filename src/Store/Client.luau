@@ -11,11 +11,13 @@ const Network = require("./Network")
 
 local Client = {}
 
-function Client.CreateReceiver(store: any, options: { [string]: any }?)
+export type BroadcastReceiver = typeof(Reflex.createBroadcastReceiver(nil :: any))
+
+function Client.CreateReceiver(store: any, options: { [string]: any }?): BroadcastReceiver
 	local receiver_options = options or {}
 
 	receiver_options.start = function()
-		Network.queries.StartReceiver()
+		Network.queries.StartReceiver.invoke()
 	end
 
 	local receiver = Reflex.createBroadcastReceiver(receiver_options)

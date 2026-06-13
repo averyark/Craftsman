@@ -8,62 +8,42 @@
 
 const Players = game:GetService("Players")
 const DataStoreService = game:GetService("DataStoreService")
-const ReplicatedStorage = game:GetService("ReplicatedStorage")
 const RunService = game:GetService("RunService")
 
 const DocumentService = require("../../../../DocumentService")
 const Promise = require("../../../../Promise")
-const Reflex = require("../../../../Reflex")
 const GreenTea = require("../../../../gt")
 local Signal = require("../Signal")
 
 const Config = require(".././Config") -- Your default data dictionary
-const Network = require("./Network")
 const PrintUtil = require("../Utilities/PrintUtil")
+const TableUtil = require("../Utilities/TableUtil")
 
 export type PlayerState = Config.PlayerState
 
 --[=[
 	@class DataServer
 	The server-side Data module for Craftsman. It handles player session loading/saving,
-	reconciliation against schemas (via GreenTea), session locking, client replication,
-	and provides state producers for server-side state modification.
+	reconciliation against schemas (via GreenTea), session locking, and hooks into the
+	global Store.
 ]=]
 local Data = {}
 
 local DataConfig = Config.DATA or {}
-local BRIDGE_FOLDER_NAME = DataConfig.BRIDGE_FOLDER_NAME or "CraftsmanDataBridge"
-local _STATE_EVENT_NAME = DataConfig.STATE_EVENT_NAME or "StateUpdated"
-local _REQUEST_FUNCTION_NAME = DataConfig.REQUEST_FUNCTION_NAME or "RequestState"
 
 local DefaultState: PlayerState = nil :: any
 local DocumentStore = (nil :: any) :: typeof(DocumentService.DocumentStore.new(...))
-local BridgeFolder = nil
-local Schema = nil
-
-local function deep_clone<T>(value: T): T
-	if type(value) ~= "table" then
-		return value
-	end
-
-	local clone = {}
-
-	for key, child in value do
-		clone[deep_clone(key)] = deep_clone(child)
-	end
-
-	return clone :: any
-end
+local Schema: any? = nil
 
 local function normalize_state(value): PlayerState
 	if type(value) ~= "table" then
 		return value
 	end
 
-	return table.freeze(deep_clone(value))
+	return table.freeze(TableUtil.DeepClone(value))
 end
 
-local function validate_template(template: PlayerState, value: PlayerState): boolean
+local function reconcile_template(template: PlayerState, value: PlayerState): boolean
 	if type(template) ~= "table" then
 		return typeof(value) == typeof(template)
 	end
@@ -76,12 +56,12 @@ local function validate_template(template: PlayerState, value: PlayerState): boo
 		local candidate_value = value[key]
 
 		if candidate_value == nil then
-			value[key] = deep_clone(template_value)
+			value[key] = TableUtil.DeepClone(template_value)
 			candidate_value = value[key]
 		end
 
 		if type(template_value) == "table" then
-			if not validate_template(template_value, candidate_value) then
+			if not reconcile_template(template_value, candidate_value) then
 				return false
 			end
 		elseif typeof(candidate_value) ~= typeof(template_value) then
@@ -98,39 +78,23 @@ local function validate_state(value: PlayerState): (PlayerState?, string?)
 		if not ok then
 			return nil, tostring(cause)
 		end
-		-- :assert() casts the value to the schema's declared type.
 		return Schema:assert(value) :: PlayerState
 	end
 
-	-- Fallback: structural template-diff check.
-	if not validate_template(DataConfig.TEMPLATE, value) then
+	if not reconcile_template(DataConfig.TEMPLATE, value) then
 		return nil, "value does not match data template"
 	end
 
 	return value
 end
 
-local function create_bridge()
-	if not RunService:IsServer() or DataConfig.AUTO_CREATE_BRIDGE == false then
-		return
-	end
-
-	local bridge_folder = ReplicatedStorage:FindFirstChild(BRIDGE_FOLDER_NAME)
-	if not bridge_folder then
-		bridge_folder = Instance.new("Folder")
-		bridge_folder.Name = BRIDGE_FOLDER_NAME
-		bridge_folder.Parent = ReplicatedStorage
-	end
-
-	BridgeFolder = bridge_folder
-end
 
 local function clone_template(): PlayerState
 	return normalize_state(DefaultState)
 end
 
 local function reconcile_state(state: PlayerState): PlayerState
-	local mutable_state = deep_clone(state)
+	local mutable_state = TableUtil.DeepClone(state)
 	local validated, err = validate_state(mutable_state)
 
 	if not validated then
@@ -141,42 +105,9 @@ local function reconcile_state(state: PlayerState): PlayerState
 	return normalize_state(validated)
 end
 
-local function make_producer(initial_state: PlayerState)
-	return Reflex.createProducer(initial_state, {
-		SetState = function(state, next_state)
-			if next_state == state then
-				return state
-			end
-
-			if type(next_state) ~= "table" then
-				return state
-			end
-
-			return normalize_state(next_state)
-		end,
-		UpdateState = function(state, updater)
-			local next_state = updater(state)
-
-			if next_state == state then
-				return state
-			end
-
-			if type(next_state) ~= "table" then
-				return state
-			end
-
-			return normalize_state(next_state)
-		end,
-		ResetState = function()
-			return clone_template()
-		end,
-	})
-end
-
 export type Record = {
 	Player: Player,
-	Document: typeof(DocumentStore),
-	Producer: typeof(make_producer(clone_template())),
+	Document: typeof(DocumentStore:GetDocument(...)),
 	Loaded: boolean,
 	LoadPromise: typeof(Promise.new(...))?,
 }
@@ -192,12 +123,10 @@ local function get_record(player: Player): Record
 	end
 
 	local document = DocumentStore:GetDocument(tostring(player.UserId))
-	local producer = make_producer(clone_template())
 
 	record = {
 		Player = player,
 		Document = document,
-		Producer = producer,
 		Loaded = false,
 		LoadPromise = nil,
 	}
@@ -207,19 +136,16 @@ local function get_record(player: Player): Record
 	return record
 end
 
-local function sync_client(player, state)
-	if player.Parent then
-		Network.packets.StateUpdated.sendTo(state, player)
-	end
-end
-
 local function settle_loaded_state(player, record, state)
 	local normalized_state = reconcile_state(state)
-	record.Producer.SetState(normalized_state)
+
+	if Data.Producer and Data.Producer._LoadPlayer then
+		Data.Producer._LoadPlayer(tostring(player.UserId), normalized_state)
+	end
+
 	record.Document:SetCache(normalized_state)
 	record.Loaded = true
 	Data.Loaded:Fire(player, normalized_state)
-	sync_client(player, normalized_state)
 
 	return normalized_state
 end
@@ -229,42 +155,44 @@ local function finish_saved_state(player, record, result)
 		return nil, result.reason
 	end
 
-	local saved_state = if result.data then normalize_state(result.data) else record.Producer:getState()
-	record.Producer.SetState(saved_state)
+	local saved_state = if result.data then normalize_state(result.data) else Data:GetPlayerState(player)
+
 	Data.Saved:Fire(player, saved_state)
-	sync_client(player, saved_state)
 
 	return saved_state
 end
 
 local function create_save_promise(player, record, should_close)
 	return Promise.new(function(resolve, reject)
-		task.spawn(function()
-			if not record.Document:IsOpen() then
-				local current_state = record.Producer:getState()
-				resolve(current_state)
-				return
+		if not record.Document:IsOpen() then
+			resolve(Data:GetPlayerState(player))
+			return
+		end
+
+		local current_state = Data:GetPlayerState(player)
+		if current_state then
+			record.Document:SetCache(current_state)
+		end
+
+		local result = if should_close then record.Document:Close() else record.Document:Save()
+		local saved_state, reason = finish_saved_state(player, record, result)
+
+		if not saved_state then
+			reject(reason)
+			return
+		end
+
+		if should_close then
+			if Data.Producer and Data.Producer._UnloadPlayer then
+				Data.Producer._UnloadPlayer(tostring(player.UserId))
 			end
+			PlayerRecords[player] = nil
+			record.Loaded = false
+		end
 
-			local result = if should_close then record.Document:Close() else record.Document:Save()
-			local saved_state, reason = finish_saved_state(player, record, result)
-
-			if not saved_state then
-				reject(reason)
-				return
-			end
-
-			if should_close then
-				PlayerRecords[player] = nil
-				record.Loaded = false
-			end
-
-			resolve(saved_state)
-		end)
+		resolve(saved_state)
 	end)
 end
-
-DefaultState = normalize_state(DataConfig.TEMPLATE)
 
 local RealLoadedSignal = Signal.new()
 
@@ -279,28 +207,38 @@ Data.Loaded = {
 		local conn = RealLoadedSignal:Connect(fn)
 
 		for player, record in PlayerRecords do
-			if record.Loaded then
-				task.spawn(fn, player, record.Producer:getState())
+			if not record.Loaded then
+				continue
 			end
+
+			task.spawn(fn, player, Data:GetPlayerState(player))
 		end
 
 		return conn
 	end,
 	Once = function(self, fn)
 		for player, record in PlayerRecords do
-			if record.Loaded then
-				task.spawn(fn, player, record.Producer:getState())
-				return {
-					Disconnect = function() end,
-					Destroy = function() end,
-					Connected = false,
-				}
+			if not record.Loaded then
+				continue
 			end
+
+			task.spawn(fn, player, Data:GetPlayerState(player))
+
+			return {
+				Disconnect = function() end,
+				Destroy = function() end,
+				Connected = false,
+			}
 		end
 
 		return RealLoadedSignal:Once(fn)
 	end,
 	Wait = function(self)
+		for player, record in PlayerRecords do
+			if record.Loaded then
+				return player, Data:GetPlayerState(player)
+			end
+		end
 		return RealLoadedSignal:Wait()
 	end,
 	Fire = function(self, ...)
@@ -318,12 +256,17 @@ Data.Saved = Signal.new() :: Signal.Signal<Player, PlayerState>
 --[=[
 	@method Init
 	@within DataServer
+	@param config { Producer: any }? -- The global producer configuration
 	Initializes the server-side data store. Sets up the GreenTea validation schema
 	and constructs the DocumentStore object.
 ]=]
-function Data:Init()
+function Data:Init(config: { Producer: any }?)
 	if DocumentStore then
 		return
+	end
+
+	if config and config.Producer then
+		Data.Producer = config.Producer
 	end
 
 	DefaultState = normalize_state(DataConfig.TEMPLATE)
@@ -340,20 +283,15 @@ function Data:Init()
 
 	if DataConfig.ENABLED == false then
 		Data.DocumentStore = nil
-		Data.BridgeFolder = nil
-		Data.StateEvent = nil
-		Data.RequestFunction = nil
 		Data.DefaultState = clone_template()
 		return
 	end
-
-	create_bridge()
 
 	local data_store = DataStoreService:GetDataStore(DataConfig.STORE_NAME)
 	DocumentStore = DocumentService.DocumentStore.new({
 		dataStore = data_store,
 		check = function(value)
-			local mutable_value = deep_clone(value)
+			local mutable_value = TableUtil.DeepClone(value)
 			local validated, err = validate_state(mutable_value)
 
 			if not validated then
@@ -370,9 +308,6 @@ function Data:Init()
 	})
 
 	Data.DocumentStore = DocumentStore
-	Data.BridgeFolder = BridgeFolder
-	Data.StateEvent = nil
-	Data.RequestFunction = nil
 	Data.DefaultState = DefaultState
 end
 
@@ -381,89 +316,25 @@ end
 	@within DataServer
 	@param player Player -- The player instance
 	@return Record -- The internal record representing the player session status
-	Returns the internal record containing the Player's Document, Reflex Producer, and load status.
+	Returns the internal record containing the Player's Document and load status.
 ]=]
 function Data:GetPlayerRecord(player: Player)
 	return get_record(player)
 end
 
 --[=[
-	@method GetProducer
+	@method GetPlayerState
 	@within DataServer
 	@param player Player -- The player instance
-	@return Producer -- The Reflex producer for this player
-	Gets the Reflex producer associated with the player.
+	@param selector ((PlayerState) -> any)? -- Optional selector function
+	@return any -- The current player state, or selected portion
+	Queries the current state of a player from the global producer.
 ]=]
-function Data:GetProducer(player: Player)
-	return get_record(player).Producer
-end
-
---[=[
-	@method GetState
-	@within DataServer
-	@param player Player -- The player instance
-	@return PlayerState -- The current player state, deep-cloned and frozen
-	Queries the current state of a player. Yields if the player's data is still loading.
-]=]
-function Data:GetState(player: Player)
-	local record = get_record(player)
-	if not record.Loaded and record.LoadPromise then
-		pcall(function()
-			record.LoadPromise:await()
-		end)
+function Data:GetPlayerState(player: Player, selector: ((PlayerState) -> any)?): any
+	if not Data.Producer then
+		return nil
 	end
-	return normalize_state(record.Producer:getState())
-end
-
---[=[
-	@method SetState
-	@within DataServer
-	@param player Player -- The player instance
-	@param next_state PlayerState -- The new state to set
-	@return PlayerState -- The updated state
-	Overwrites a player's state. Replicates changes to the client and caches them for saving.
-]=]
-function Data:SetState(player: Player, next_state)
-	local record = get_record(player)
-	local normalized_state = record.Producer.SetState(next_state)
-
-	if record.Document:IsOpen() then
-		record.Document:SetCache(normalized_state)
-	end
-
-	sync_client(player, normalized_state)
-	return normalized_state
-end
-
---[=[
-	@method UpdateState
-	@within DataServer
-	@param player Player -- The player instance
-	@param updater (state: PlayerState) -> PlayerState -- Function that transforms state
-	@return PlayerState -- The updated state
-	Updates a player's state using an updater function. Replicates changes to the client.
-]=]
-function Data:UpdateState(player: Player, updater)
-	local record = get_record(player)
-	local next_state = record.Producer.UpdateState(updater)
-
-	if record.Document:IsOpen() then
-		record.Document:SetCache(next_state)
-	end
-
-	sync_client(player, next_state)
-	return next_state
-end
-
---[=[
-	@method ResetState
-	@within DataServer
-	@param player Player -- The player instance
-	@return PlayerState -- The reset state
-	Resets the player's state back to the default template state.
-]=]
-function Data:ResetState(player: Player)
-	return self:SetState(player, clone_template())
+	return Data.Producer:getPlayerState(player, selector)
 end
 
 --[=[
@@ -471,7 +342,7 @@ end
 	@within DataServer
 	@param player Player -- The player instance
 	@return Promise<PlayerState> -- A promise resolving with the loaded state
-	Loads a player's document from the datastore, steals locks if needed, and syncs to the client.
+	Loads a player's document from the datastore, steals locks if needed, and syncs to the global store.
 ]=]
 function Data:LoadPlayer(player: Player)
 	local record = get_record(player)
@@ -481,30 +352,29 @@ function Data:LoadPlayer(player: Player)
 	end
 
 	record.LoadPromise = Promise.new(function(resolve, reject)
-		task.spawn(function()
-			local attempt = 1
-			local max_attempts = DataConfig.OPEN_ATTEMPTS or 2
-			while attempt <= max_attempts do
-				local result = record.Document:Open()
+		local attempt = 1
+		local max_attempts = DataConfig.OPEN_ATTEMPTS or 2
 
-				if result.success then
-					record.LoadPromise = nil
-					record.Loaded = true
-					resolve(settle_loaded_state(player, record, result.data))
-					return
-				end
+		while attempt <= max_attempts do
+			local result = record.Document:Open()
 
-				if result.reason == "SessionLockedError" and attempt == 1 then
-					record.Document:Steal()
-					attempt += 1
-					continue
-				end
-
+			if result.success then
+				local settled_state = settle_loaded_state(player, record, result.data)
 				record.LoadPromise = nil
-				reject(result.reason)
+				resolve(settled_state)
 				return
 			end
-		end)
+
+			if result.reason == "SessionLockedError" and attempt == 1 then
+				record.Document:Steal()
+				attempt += 1
+				continue
+			end
+
+			record.LoadPromise = nil
+			reject(result.reason)
+			return
+		end
 	end)
 
 	return record.LoadPromise
@@ -539,7 +409,7 @@ end
 	@within DataServer
 	@param player Player -- The player instance
 	@return Promise<nil> -- A promise resolving when closed
-	Closes the player's session, releases session locks, and saves current state.
+	Closes the player's session, releases session locks, unloads from global store, and saves state.
 ]=]
 function Data:ClosePlayer(player: Player)
 	local record = PlayerRecords[player]
@@ -587,7 +457,9 @@ function Data:Shutdown()
 		return
 	end
 
+	-- Do not change this to a pairs loop. This is to avoid issues with PlayerRecords being modified while iterating.
 	local players = {}
+
 	for player in PlayerRecords do
 		players[#players + 1] = player
 	end
@@ -605,14 +477,24 @@ function Data:Shutdown()
 			continue
 		end
 
+		local current_state = Data:GetPlayerState(player)
+		if current_state then
+			record.Document:SetCache(current_state)
+		end
+
 		local result = record.Document:Close()
 		if result.success then
 			finish_saved_state(player, record, result)
 		end
 
+		if Data.Producer and Data.Producer._UnloadPlayer then
+			Data.Producer._UnloadPlayer(tostring(player.UserId))
+		end
+
 		PlayerRecords[player] = nil
 		record.Loaded = false
 	end
+	--
 end
 
 --[=[
@@ -629,33 +511,25 @@ function Data:Start()
 	self:Init()
 
 	if DataConfig.LOAD_EXISTING_PLAYERS ~= false then
-		local players = Players:GetPlayers()
-		for index = 1, #players do
-			local player = players[index]
-			task.spawn(function()
-				self:LoadPlayer(player):catch(function(err)
-					PrintUtil:Warn(`Data load failed for {player.Name}: {err}`)
-				end)
+		for _, player in Players:GetPlayers() do
+			self:LoadPlayer(player):catch(function(err)
+				PrintUtil:Warn(`Data load failed for {player.Name}: {err}`)
 			end)
 		end
 	end
 
 	if DataConfig.LOAD_ON_PLAYER_ADDED ~= false then
 		Players.PlayerAdded:Connect(function(player)
-			task.spawn(function()
-				self:LoadPlayer(player):catch(function(err)
-					PrintUtil:Warn(`Data load failed for {player.Name}: {err}`)
-				end)
+			self:LoadPlayer(player):catch(function(err)
+				PrintUtil:Warn(`Data load failed for {player.Name}: {err}`)
 			end)
 		end)
 	end
 
 	if DataConfig.SAVE_ON_PLAYER_REMOVING ~= false then
 		Players.PlayerRemoving:Connect(function(player)
-			task.spawn(function()
-				self:ClosePlayer(player):catch(function(err)
-					PrintUtil:Warn(`Data close failed for {player.Name}: {err}`)
-				end)
+			self:ClosePlayer(player):catch(function(err)
+				PrintUtil:Warn(`Data close failed for {player.Name}: {err}`)
 			end)
 		end)
 	end
@@ -665,12 +539,23 @@ function Data:Start()
 			self:Shutdown()
 		end)
 	end
-
-	if DataConfig.SYNC_CLIENT ~= false then
-		Network.queries.RequestState.listen(function(_data, player)
-			return self:GetState(player)
-		end)
-	end
 end
 
-return Data
+export type ServerModule = {
+	Loaded: Signal.Signal<Player, PlayerState>,
+	Saved: Signal.Signal<Player, PlayerState>,
+	Producer: any?,
+
+	Init: (self: ServerModule, config: { Producer: any }?) -> (),
+	Start: (self: ServerModule) -> (),
+	GetPlayerRecord: (self: ServerModule, player: Player) -> any?,
+	GetPlayerState: ((self: ServerModule, player: Player) -> PlayerState?)
+		& (<U>(self: ServerModule, player: Player, selector: (PlayerState) -> U) -> U?),
+	LoadPlayer: (self: ServerModule, player: Player) -> any,
+	SavePlayer: (self: ServerModule, player: Player) -> any,
+	ClosePlayer: (self: ServerModule, player: Player) -> any,
+	RemovePlayer: (self: ServerModule, player: Player) -> typeof(Promise.new(...)),
+	Shutdown: (self: ServerModule) -> (),
+}
+
+return (Data :: any) :: ServerModule

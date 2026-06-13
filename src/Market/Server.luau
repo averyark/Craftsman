@@ -12,6 +12,7 @@ const RunService = game:GetService("RunService")
 
 local Signal = require("../Signal")
 const Queue = require("../Queue")
+const Promise = require("../../../../Promise")
 
 const Config = require("../Config")
 const PrintUtil = require("../Utilities/PrintUtil")
@@ -34,6 +35,7 @@ local Market = {}
 
 local MarketConfig = Config.MARKET or {}
 
+local Initiated = false
 local Started = false
 local Handlers = {}
 local GamepassCache = {}
@@ -102,14 +104,6 @@ Market.PurchaseFailed = Signal.new()
 ]=]
 Market.Handlers = Handlers
 
-local function clone_state(state)
-	if type(state) ~= "table" then
-		return {}
-	end
-
-	return TableUtil.DeepClone(state)
-end
-
 local function normalize_definition(definition)
 	if type(definition) == "string" then
 		return {
@@ -124,18 +118,6 @@ local function normalize_definition(definition)
 	return definition
 end
 
-local function ensure_receipts(state)
-	state = type(state) == "table" and state or {}
-
-	local receipts_field = get_receipts_field()
-	local receipts = state[receipts_field]
-	if type(receipts) ~= "table" then
-		receipts = {}
-		state[receipts_field] = receipts
-	end
-
-	return state, receipts
-end
 
 local function resolve_handler(definition)
 	local handler_name = nil
@@ -167,16 +149,6 @@ local function ensure_player_loaded(player)
 	return record
 end
 
-local function save_player_state(player, state)
-	local normalized_state = DataServer:SetState(player, state)
-	local ok, result = DataServer:SavePlayer(player):await()
-	if not ok then
-		return nil, result
-	end
-
-	return normalized_state
-end
-
 local function apply_definition(player, definition, context)
 	definition = normalize_definition(definition)
 	if not definition then
@@ -188,9 +160,20 @@ local function apply_definition(player, definition, context)
 		return nil, false, load_error
 	end
 
-	local state = clone_state(DataServer:GetState(player))
-	local receipts = nil
-	state, receipts = ensure_receipts(state)
+	if not Market.Producer then
+		return nil, false, "MarketServer requires a Producer configured via Init()"
+	end
+
+	local state = Market.Producer:getPlayerState(player)
+	if not state then
+		return nil, false, "Player state not found in producer"
+	end
+
+	local receipts_field = get_receipts_field()
+	local receipts = state[receipts_field]
+	if type(receipts) ~= "table" then
+		receipts = {}
+	end
 
 	local receipt_id = context and context.ReceiptId or nil
 	if receipt_id and receipts[receipt_id] then
@@ -202,7 +185,7 @@ local function apply_definition(player, definition, context)
 		return nil, false, "MissingHandler"
 	end
 
-	local ok, result, reason = pcall(handler, player, state, definition, context)
+	local ok, result, reason = pcall(handler, player, definition, context)
 	if not ok then
 		return nil, false, result
 	end
@@ -211,28 +194,23 @@ local function apply_definition(player, definition, context)
 		return nil, false, reason or "HandlerRejected"
 	end
 
-	if type(result) == "table" then
-		state = result
-	end
-
-	state, receipts = ensure_receipts(state)
 	if receipt_id then
-		receipts[receipt_id] = true
+		Market.Producer._AddReceipt(tostring(player.UserId), receipts_field, receipt_id)
 	end
 
-	local saved_state, save_error = save_player_state(player, state)
-	if not saved_state then
+	local save_ok, save_error = DataServer:SavePlayer(player):await()
+	if not save_ok then
 		return nil, false, save_error
 	end
 
-	return saved_state, false, nil
+	return Market.Producer:getPlayerState(player), false, nil
 end
 
 --[=[
 	@method RegisterHandler
 	@within MarketServer
 	@param handler_name string -- Unique name of the purchase handler
-	@param callback function -- The handler function (player, state, definition, context) -> (nextState, error)
+	@param callback function -- The handler function (player, definition, context) -> (boolean, string?)
 	@return boolean -- Whether registration succeeded
 	Registers a callback function as a purchase handler.
 ]=]
@@ -443,9 +421,10 @@ function Market:_ProcessReceipt(receipt_info)
 	end
 
 	local receipt_id = receipt_info.PurchaseId
-	if type(receipt_id) ~= "string" or receipt_id == "" then
+	if receipt_id == nil or receipt_id == "" then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
+	receipt_id = tostring(receipt_id)
 
 	local player = Players:GetPlayerByUserId(receipt_info.PlayerId)
 	if not player then
@@ -490,12 +469,17 @@ end
 	@within MarketServer
 	Initializes the server-side Market service.
 ]=]
-function Market:Init()
-	if not RunService:IsServer() or Started then
+function Market:Init(options: { Producer: any }?)
+	if not RunService:IsServer() or Initiated then
 		return
 	end
 
+	if options and options.Producer then
+		self.Producer = options.Producer
+	end
+
 	get_transaction_queue()
+	Initiated = true
 end
 
 --[=[
@@ -512,18 +496,26 @@ function Market:Start()
 
 	local function cache_player_gamepasses(player)
 		GamepassCache[player] = {}
-		task.spawn(function()
-			local gamepass_ids = TableUtil.Keys(get_gamepass_definitions())
-			for i = 1, #gamepass_ids do
-				local gp_id = gamepass_ids[i]
-				local success, owns = pcall(function()
-					return MarketplaceService:UserOwnsGamePassAsync(player.UserId, gp_id)
-				end)
-				if success and owns then
-					GamepassCache[player][gp_id] = true
-					task.spawn(function()
+
+		local promises = {}
+
+		for gp_id in get_gamepass_definitions() do
+			table.insert(
+				promises,
+				Promise.try(MarketplaceService.UserOwnsGamePassAsync, MarketplaceService, player.UserId, gp_id)
+					:catch(function(err)
+						PrintUtil:Warn(`Failed to check ownership of gamepass {gp_id} for {player.Name}`)
+						return err
+					end)
+					:andThen(function(owns)
+						if not owns then
+							return
+						end
+
+						GamepassCache[player][gp_id] = true
+
 						local transaction_key = make_transaction_key(player, "Gamepass", gp_id)
-						self:_EnqueueTransaction(player, transaction_key, {
+						return self:_EnqueueTransaction(player, transaction_key, {
 							GamepassId = gp_id,
 							SyncSource = "OwnershipCache",
 						}, function()
@@ -534,9 +526,10 @@ function Market:Start()
 							PrintUtil:Warn(`Failed to sync owned gamepass {gp_id} for {player.Name}: {reason}`)
 						end)
 					end)
-				end
-			end
-		end)
+			)
+		end
+
+		Promise.all(promises)
 	end
 
 	local players = Players:GetPlayers()
@@ -584,14 +577,10 @@ function Market:Start()
 	PrintUtil:Print("Marketplace server started")
 end
 
-type PurchaseHandler = (
-	player: Player,
-	state: PlayerState,
-	definition: any,
-	context: any
-) -> (PlayerState | boolean, string?)
+type PurchaseHandler = (player: Player, definition: any, context: any) -> (boolean, string?)
 
 type MarketModule = {
+	Producer: any?,
 	RegisterHandler: (self: MarketModule, handler_name: string, callback: PurchaseHandler) -> boolean,
 	GetProductDefinition: (self: MarketModule, product_id: number) -> any,
 	GetGamepassDefinition: (self: MarketModule, gamepass_id: number) -> any,
@@ -610,7 +599,7 @@ type MarketModule = {
 	) -> (boolean, any, PlayerState?),
 	PromptProduct: (self: MarketModule, player: Player, product_id: number) -> boolean,
 	PromptGamepass: (self: MarketModule, player: Player, gamepass_id: number) -> boolean,
-	Init: (self: MarketModule) -> (),
+	Init: (self: MarketModule, options: { Producer: any }?) -> (),
 	Start: (self: MarketModule) -> (),
 	ProductGranted: Signal.Signal<Player, number, any, PlayerState, any>,
 	GamepassGranted: Signal.Signal<Player, number, any, PlayerState, any>,

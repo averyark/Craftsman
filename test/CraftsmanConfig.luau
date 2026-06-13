@@ -30,13 +30,11 @@ local GAMEPASSES = {
 
 local TEMPLATE = {
 	Receipts = {},
-	Permissions = {},
 	Coins = 0,
 }
 
 local SCHEMA = gt.build(gt.table({
 	Receipts = gt.table({ [gt.any()] = gt.any() }),
-	Permissions = gt.table({ [gt.any()] = gt.any() }),
 	Coins = gt.number(),
 }))
 

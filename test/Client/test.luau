@@ -11,6 +11,7 @@ const Players = game:GetService("Players")
 
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
 const CraftsmanConfig = require("@game/ReplicatedStorage/CraftsmanConfig")
+const PlayerData = require("@game/ReplicatedStorage/Shared/PlayerData")
 const Promise = require("../Packages/Promise")
 
 local test = Craftsman.Component.new({})
@@ -46,18 +47,14 @@ test.Start = function()
 	end
 
 	-- Initialize the HUD label immediately with the current loaded state
-	local current_state = Craftsman.DataClient:GetState()
+	local current_state = Craftsman.DataClient:GetPlayerState()
 	if current_state then
 		update_label(current_state.Coins or 0)
 	end
 
 	-- Subscribe to any future changes
-	Craftsman.DataClient:Subscribe(function(state, previous_state)
-		local coins = state.Coins or 0
-		local previous_coins = previous_state and previous_state.Coins
-		if previous_state == nil or coins ~= previous_coins then
-			update_label(coins)
-		end
+	PlayerData:subscribePlayer(player, function(state)
+		update_label(state and state.Coins or 0)
 	end)
 
 	-- Populate Marketplace UI
@@ -71,8 +68,7 @@ test.Start = function()
 	local product_template = products_container:WaitForChild("Template")
 	product_template.Visible = false
 
-	for i = 1, #product_ids do
-		local product_id = product_ids[i]
+	for _, product_id in product_ids do
 		local card = product_template:Clone()
 		card.Name = "Product_" .. tostring(product_id)
 		card.Parent = products_container
@@ -92,8 +88,7 @@ test.Start = function()
 	local gamepass_template = gamepasses_container:WaitForChild("Template")
 	gamepass_template.Visible = false
 
-	for i = 1, #gamepass_ids do
-		local gamepass_id = gamepass_ids[i]
+	for _, gamepass_id in gamepass_ids do
 		local card = gamepass_template:Clone()
 		card.Name = "Gamepass_" .. tostring(gamepass_id)
 		card.Parent = gamepasses_container

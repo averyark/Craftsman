@@ -26,12 +26,18 @@ local function add_player(player: Player)
 end
 
 function Bootstrap:Start(modules: Instance?)
+	local PlayerData = require(script.Parent.PlayerData)
 	if RunService:IsClient() then
+		Craftsman.StoreClient.CreateReceiver(PlayerData)
+		Craftsman.DataClient:Init({ Producer = PlayerData })
 		Craftsman.DataClient:Start()
 		Craftsman.MarketClient:Start()
 		Craftsman.StateMachineClient:Start()
 	else
+		Craftsman.StoreServer.CreateBroadcaster(PlayerData)
+		Craftsman.DataServer:Init({ Producer = PlayerData })
 		Craftsman.DataServer:Start()
+		Craftsman.MarketServer:Init({ Producer = PlayerData })
 		Craftsman.MarketServer:Start()
 		Craftsman.StateMachineServer:Start()
 	end
