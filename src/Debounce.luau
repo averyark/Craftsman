@@ -56,6 +56,7 @@ local function new(func: (...any) -> ...any, wait: number, options: DebounceOpti
 		end
 		return Debounced.Call(self, ...)
 	end
+	--
 
 	return self
 end

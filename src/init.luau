@@ -8,6 +8,8 @@ local MarketServer = nil
 local MarketClient = require("@self/Market/Client")
 local StateMachineServer = nil
 local StateMachineClient = require("@self/StateMachine/Client")
+local StoreServer = nil
+local StoreClient = require("@self/Store/Client")
 const Queue = require("@self/Queue")
 const StringUtil = require("@self/Utilities/StringUtil")
 const AnimationUtil = require("@self/Utilities/AnimationUtil")
@@ -25,6 +27,7 @@ if RunService:IsServer() then
 	DataServer = require("@self/Data/Server")
 	MarketServer = require("@self/Market/Server")
 	StateMachineServer = require("@self/StateMachine/Server")
+	StoreServer = require("@self/Store/Server")
 end
 
 const ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -36,6 +39,7 @@ local Machine = require("@self/StateMachine/Machine")
 
 local State = require("@self/StateMachine/State")
 const WorldUtil = require("@self/Utilities/WorldUtil")
+const Store = require("@self/Store")
 
 local Craftsman = {
 	Component = Component, -- Module Loader
@@ -55,6 +59,9 @@ local Craftsman = {
 	StateMachineServer = StateMachineServer, -- Server State Machine Replication
 	StateMachineClient = StateMachineClient, -- Client State Machine Replication
 
+	StoreServer = StoreServer, -- Server Store Replication
+	StoreClient = StoreClient, -- Client Store Replication
+
 	InputUtil = InputUtil, -- User Input Handling
 	PrintUtil = PrintUtil, -- Debugging and Printing
 	TableUtil = TableUti, -- Table Manipulation Utilities
@@ -69,6 +76,7 @@ local Craftsman = {
 	StringUtil = StringUtil, -- String Utilities
 
 	Config = Config, -- Configuration Management
+	Store = Store, -- Store Utility
 }
 
 -- Automatically load custom configuration if it exists
