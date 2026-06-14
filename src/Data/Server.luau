@@ -88,7 +88,6 @@ local function validate_state(value: PlayerState): (PlayerState?, string?)
 	return value
 end
 
-
 local function clone_template(): PlayerState
 	return normalize_state(DefaultState)
 end

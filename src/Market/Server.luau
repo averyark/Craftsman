@@ -118,7 +118,6 @@ local function normalize_definition(definition)
 	return definition
 end
 
-
 local function resolve_handler(definition)
 	local handler_name = nil
 

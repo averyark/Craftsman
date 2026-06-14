@@ -229,7 +229,8 @@ Store.PlayerActionRegistry = {}
 ]=]
 function Store.PlayerAction(callback: (any, ...any) -> any)
 	return function(state: any, user_id_or_player: string | Player, ...)
-		local user_id = type(user_id_or_player) == "string" and user_id_or_player or tostring((user_id_or_player :: Player).UserId)
+		local user_id = type(user_id_or_player) == "string" and user_id_or_player
+			or tostring((user_id_or_player :: Player).UserId)
 		local player_state = state[user_id]
 		if not player_state then
 			return state
@@ -374,11 +375,11 @@ function Store.CreatePlayerProducer<S>(initial_player_state: S)
 				player_or_id: Player | string,
 				selector: (state: S) -> Selection
 			) -> Selection?),
-			subscribePlayer: ((
+			subscribePlayer: (
 				self: Producer<S, A>,
 				player: Player | string,
 				listener: (state: S?, prevState: S?) -> ...any
-			) -> (() -> ()))
+			) -> () -> (),
 		} & Producer<S, A>
 	end
 end

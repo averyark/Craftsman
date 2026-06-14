@@ -55,7 +55,10 @@ function Server.CreateBroadcaster(store: any, options: { [string]: any }?)
 		broadcaster_options.beforeDispatch = function(player: Player, action: any)
 			if Store.PlayerActionRegistry[action.name] then
 				local target_arg = action.arguments[1]
-				local target_id_str = typeof(target_arg) == "Instance" and target_arg:IsA("Player") and tostring(target_arg.UserId) or tostring(target_arg)
+				local target_id_str = typeof(target_arg) == "Instance"
+						and target_arg:IsA("Player")
+						and tostring(target_arg.UserId)
+					or tostring(target_arg)
 				if target_id_str ~= tostring(player.UserId) then
 					return nil
 				end
