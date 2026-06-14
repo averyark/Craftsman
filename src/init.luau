@@ -33,6 +33,7 @@ end
 const ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 const Entity = require("@self/Entity")
+const Pathfind = require("@self/Pathfind")
 
 local StateMachine = require("@self/StateMachine")
 local Machine = require("@self/StateMachine/Machine")
@@ -48,6 +49,7 @@ local Craftsman = {
 	Queue = Queue, -- Task Queue System,
 	State = State, -- State Machine State
 	Machine = Machine, -- State Machine
+	Pathfind = Pathfind,
 
 	Entity = Entity,
 
