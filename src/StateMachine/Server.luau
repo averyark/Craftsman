@@ -25,6 +25,7 @@ type Record = {
 	Targets: { Player }?,
 	Connection: any,
 	DestroyConnection: any,
+	Sequence: number,
 }
 
 local MachineRecordsById = (setmetatable({}, { __mode = "v" }) :: any) :: { [string]: Record }
@@ -48,6 +49,7 @@ local function build_payload(machine: Machine, record: Record, context: any?): {
 		Running = machine:IsRunning(),
 		ClientAuthoritative = machine:IsClientAuthoritative(),
 		Context = context,
+		Sequence = record.Sequence or 0,
 	}
 end
 
@@ -281,6 +283,7 @@ function Server:Register(machine: Machine, targets: { Player }?): boolean
 			Targets = targets,
 			Connection = nil,
 			DestroyConnection = nil,
+			Sequence = 0,
 		}
 
 		MachineRecordsById[machine_id] = record
@@ -293,6 +296,7 @@ function Server:Register(machine: Machine, targets: { Player }?): boolean
 
 	if record.Connection == nil then
 		record.Connection = machine.Transitioned:Connect(function(_machine, _previous, _current, context, source_player)
+			record.Sequence = (record.Sequence or 0) + 1
 			local payload = build_payload(_machine, record, context)
 			send_payload(payload, record.Targets, source_player)
 		end)

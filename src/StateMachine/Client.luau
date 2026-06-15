@@ -26,6 +26,7 @@ local ClientConnectionsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :
 local SuppressClientSendByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: boolean }
 local DestroyConnectionsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: any }
 local CachedStatesByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: { [string]: any } }
+local LastSequenceByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: number }
 
 local function get_current_name(machine: Machine): string?
 	local current = machine:GetCurrent()
@@ -80,6 +81,17 @@ local function resolve_payload_id(payload): string?
 end
 
 local function apply_payload(machine: Machine, payload: { [string]: any })
+	-- Drop stale payloads. Server stamps every transition. An out-of-order RequestState response (snapshot of an older state) carries a lower sequence than the live broadcast we already applied, so we must ignore it instead of reverting the machine.
+	local sequence = payload.Sequence
+	if type(sequence) == "number" then
+		local last = LastSequenceByMachine[machine]
+		if last ~= nil and sequence <= last then
+			return
+		end
+		LastSequenceByMachine[machine] = sequence
+	end
+	--
+
 	SuppressClientSendByMachine[machine] = true
 	local running = payload.Running == true
 	local state_name = payload.State
@@ -247,6 +259,7 @@ function Client:Unregister(machine: Machine): boolean
 	SuppressClientSendByMachine[machine] = nil
 	DestroyConnectionsByMachine[machine] = nil
 	CachedStatesByMachine[machine] = nil
+	LastSequenceByMachine[machine] = nil
 	return true
 end
 
