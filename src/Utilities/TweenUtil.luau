@@ -193,7 +193,7 @@ end
 
 export type TweenGroup = typeof(create_tween_group(...))
 
-function self.Play(self: TweenGroup)
+function tween_group.Play(self: TweenGroup)
 	--
 	for _, tw in self.Tweens do
 		tw:Play()
@@ -201,7 +201,7 @@ function self.Play(self: TweenGroup)
 	--
 end
 
-function self.Cancel(self: TweenGroup)
+function tween_group.Cancel(self: TweenGroup)
 	--
 	if self.PlaybackState ~= Enum.PlaybackState.Playing then
 		return
@@ -222,7 +222,7 @@ function self.Cancel(self: TweenGroup)
 	self._FireCompleted(Enum.PlaybackState.Cancelled)
 end
 
-function self:Pause()
+function tween_group.Pause(self: TweenGroup)
 	for _, tw in self.Tweens do
 		tw:Pause()
 	end

@@ -1,6 +1,6 @@
 [package]
 name = "averyark/craftsman"
-version = "0.7.5"
+version = "0.7.6"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 authors = ["averyark"]
