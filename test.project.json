@@ -27,15 +27,15 @@
       },
       "Client": {
         "$path": "test/Client"
-      },
-      "Framework": {
-        "$path": "test/Framework"
       }
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "Server": {
         "$path": "test/Server"
+      },
+      "Bootstrap": {
+        "$path": "test/Bootstrap.server.luau"
       }
     },
     "StarterPlayer": {

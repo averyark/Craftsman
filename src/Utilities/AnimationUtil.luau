@@ -30,7 +30,7 @@ type AnimationProperties = {
 	Looped: boolean?,
 }
 
-local GlobalAnimate = {} :: { [Model | Humanoid | Animator | AnimationController]: Animate }
+local GlobalAnimate = setmetatable({}, { __mode = "k" }) :: { [Model | Humanoid | Animator | AnimationController]: Animate }
 local GlobalAnimationRegistry = {} :: { [string]: Animation }
 
 function AnimationUtil.QuickPlay(
@@ -42,7 +42,7 @@ function AnimationUtil.QuickPlay(
 
 	local animation = GlobalAnimationRegistry[animation_name]
 	if not animation then
-		error("Animation not found in global animation cache for QuickPlay.", 2)
+		PrintUtil:Error("Animation not found in global animation cache for QuickPlay.")
 	end
 
 	animation = animation:Clone()
@@ -67,7 +67,6 @@ function AnimationUtil.QuickPlay(
 	--
 
 	track.Ended:Once(function()
-		track:Stop(safe_props.FadeTime)
 		track:Destroy()
 		animation:Destroy()
 	end)
@@ -78,7 +77,6 @@ end
 function AnimationUtil.Register(
 	animation_name: string,
 	animation_id: string,
-	properties: AnimationProperties?,
 	should_preload: boolean?
 )
 	--
@@ -108,7 +106,7 @@ function AnimationUtil.BulkRegister(
 )
 	local registered_animations = {}
 	for animation_name, data in animations do
-		registered_animations[animation_name] = AnimationUtil.Register(animation_name, data.AnimationId, data)
+		registered_animations[animation_name] = AnimationUtil.Register(animation_name, data.AnimationId, false)
 	end
 
 	if should_preload and RunService:IsClient() then
@@ -123,14 +121,14 @@ function AnimationUtil.BulkRegister(
 end
 
 function AnimationUtil.Unregister(animation_name: string)
-	local animation_id = GlobalAnimationRegistry[animation_name]
-	if not animation_id then
+	local animation = GlobalAnimationRegistry[animation_name]
+	if not animation then
 		PrintUtil:Error(
-			"AnimationUtil.Unregister: No animation found in registry with name '" .. animation_name .. "'.",
-			2
+			"AnimationUtil.Unregister: No animation found in registry with name '" .. animation_name .. "'."
 		)
 	end
 
+	animation:Destroy()
 	GlobalAnimationRegistry[animation_name] = nil
 	return true
 end
@@ -208,7 +206,9 @@ function Animate.Load(
 	end
 	--
 
-	assert(param.AnimationId and param.AnimationName, "Expected AnimationId and AnimationName")
+	if not param.AnimationId or not param.AnimationName then
+		PrintUtil:Error("Animate.Load: Expected both AnimationId and AnimationName in param.")
+	end
 
 	--
 	local animation = Instance.new("Animation")
@@ -345,16 +345,26 @@ function AnimationUtil.GetLocalAnimate()
 	--
 	local player = Players.LocalPlayer
 	if not player then
-		PrintUtil:Error("AnimationUtil.GetLocalAnimate: No local player found.", 2)
+		PrintUtil:Error("AnimationUtil.GetLocalAnimate: No local player found.")
 	end
 
 	local character = player.Character
 	if not character then
-		return
+		return nil
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return nil
+	end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		return nil
 	end
 	--
 
-	return AnimationUtil.GetSharedAnimate(character)
+	return AnimationUtil.GetSharedAnimate(animator)
 end
 
 AnimationUtil.new = new

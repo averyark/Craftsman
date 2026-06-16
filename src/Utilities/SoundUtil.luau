@@ -34,7 +34,7 @@ type SoundProperties = {
 
 local SoundGroupCache = {} :: { [string]: SoundGroup }
 local GlobalSoundRegistry = {} :: { [string]: Sound }
-local SharedSoundPlayers = {} :: { [Instance]: SoundPlayer }
+local SharedSoundPlayers = setmetatable({}, { __mode = "k" }) :: { [Instance]: SoundPlayer }
 
 --[=[
 	Retrieves an existing SoundGroup from SoundService by name.
@@ -167,7 +167,6 @@ local function apply_properties(sound: Sound, properties: SoundProperties?)
 end
 
 function SoundUtil.QuickPlay(param: {
-	Target: Instance?,
 	SoundName: string,
 	SoundId: string?,
 	SoundGroup: (string | SoundGroup)?,
@@ -281,7 +280,7 @@ function SoundUtil.BulkRegister(sounds: { [string]: { SoundId: string } & SoundP
 
 	--
 	for sound_name, data in sounds do
-		registered_sounds[sound_name] = SoundUtil.Register(sound_name, data.SoundId, data)
+		registered_sounds[sound_name] = SoundUtil.Register(sound_name, data.SoundId, data, false)
 	end
 	--
 
@@ -371,7 +370,9 @@ function SoundPlayer.Load(
 	end
 	--
 
-	assert(param.SoundId and param.SoundName, "Expected SoundId and SoundName")
+	if not param.SoundId or not param.SoundName then
+		PrintUtil:Error("SoundPlayer.Load: Expected both SoundId and SoundName in param.")
+	end
 
 	--
 	local sound = Instance.new("Sound")
@@ -426,8 +427,7 @@ function SoundPlayer.Play(
 		PrintUtil:Error(
 			"SoundPlayer.Play: Sound '"
 				.. tostring(sound_name)
-				.. "' has not been loaded. Please load the sound before playing.",
-			2
+				.. "' has not been loaded. Please load the sound before playing."
 		)
 	end
 
@@ -437,12 +437,17 @@ function SoundPlayer.Play(
 		sound = sound:Clone()
 		sound.Parent = self.Container
 
+		-- Apply per-play property overrides to the clone only, not the cached template
+		apply_properties(sound, param)
+
+		-- Force non-looped so the clone doesn't leak; Ended never fires for looped sounds
+		sound.Looped = false
+
 		sound.Ended:Once(function()
 			sound:Destroy()
 		end)
 	end
 
-	apply_properties(sound, param)
 	sound:Play()
 	return sound
 end

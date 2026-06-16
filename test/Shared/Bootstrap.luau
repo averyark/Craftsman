@@ -10,6 +10,7 @@ const Players = game:GetService("Players")
 const RunService = game:GetService("RunService")
 
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
+const ByteNet = require("../Packages/ByteNet")
 
 -- Apply user configuration before any services start
 require("@game/ReplicatedStorage/CraftsmanConfig")
