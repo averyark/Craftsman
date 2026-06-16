@@ -56,6 +56,9 @@ end
 ]=]
 --
 function MathUtil.InverseLerp(a, b, value)
+	if a == b then
+		return 0
+	end
 	return (value - a) / (b - a)
 end
 

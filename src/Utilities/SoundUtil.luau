@@ -177,9 +177,15 @@ function SoundUtil.QuickPlay(param: {
 	CFrame: CFrame?,
 	Position: Vector3?,
 })
-	local sound = Instance.new("Sound")
-	sound.SoundId = GlobalSoundRegistry[param.SoundName] or param.SoundId
-	sound.Name = param.SoundName
+	local cached_sound = GlobalSoundRegistry[param.SoundName]
+	local sound
+	if cached_sound then
+		sound = cached_sound:Clone()
+	else
+		sound = Instance.new("Sound")
+		sound.SoundId = param.SoundId or ""
+		sound.Name = param.SoundName
+	end
 
 	local sound_group = if typeof(param.SoundGroup) == "string"
 		then SoundUtil.GetSoundGroup(param.SoundGroup)
@@ -190,6 +196,13 @@ function SoundUtil.QuickPlay(param: {
 	end
 
 	apply_properties(sound, param.Properties)
+
+	-- QuickPlay is fire-and-forget and self-destroys on Ended, which never fires for a looped
+	-- sound. Force non-looped so the sound (and any host part) cannot leak.
+	if sound.Looped then
+		PrintUtil:Warn("SoundUtil.QuickPlay does not support looped sounds; forcing Looped = false.")
+		sound.Looped = false
+	end
 
 	if param.Part then
 		sound.Parent = param.Part
@@ -240,6 +253,13 @@ function SoundUtil.Register(
 
 	apply_properties(sound, properties)
 	--
+
+	-- Destroy any previously registered Sound under this name; it is parented to SoundService
+	-- and would otherwise leak as an orphan on re-registration.
+	local existing = GlobalSoundRegistry[sound_name]
+	if existing then
+		existing:Destroy()
+	end
 
 	GlobalSoundRegistry[sound_name] = sound
 
@@ -325,6 +345,11 @@ function SoundPlayer.Load(
 
 		clone.Name = param.SoundName or param.FromRegistry
 		clone.Parent = self.Container
+
+		local existing = self.SoundCache[param.SoundName or param.FromRegistry]
+		if existing then
+			existing:Destroy()
+		end
 		self.SoundCache[param.SoundName or param.FromRegistry] = clone
 
 		apply_properties(clone, param)
@@ -357,6 +382,10 @@ function SoundPlayer.Load(
 
 	apply_properties(sound, param)
 
+	local existing = self.SoundCache[param.SoundName]
+	if existing then
+		existing:Destroy()
+	end
 	self.SoundCache[param.SoundName] = sound
 
 	--

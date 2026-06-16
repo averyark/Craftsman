@@ -289,6 +289,8 @@ function Machine.Stop(self: Machine, context: any?, source: Player?): boolean
 
 	self._Current = nil
 	self._Running = false
+	-- Drop any queued transitions so a deferred drain cannot resurrect a stopped machine.
+	reset_transition_queue(self)
 	self.Transitioned:Fire(self, previous, nil, context, source)
 	return true
 end

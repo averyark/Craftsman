@@ -1,27 +1,13 @@
 --!nonstrict
---[[
-    FileName    > PlayerData.luau
-    Author      > AveryArk
-    Contact     > Twitter: https://twitter.com/averyark_
-    Created     > 13/06/2026
---]]
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Craftsman = require(ReplicatedStorage.Packages.Craftsman)
 
-const Players = game:GetService("Players")
+local Config = require(ReplicatedStorage.CraftsmanConfig)
 
-local Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
-
-local PlayerData = Craftsman.Store.CreatePlayerProducer({
-	Coins = 0,
-})({
-	AddCoins = function(player_state, amount: number)
-		return {
-			Coins = (player_state.Coins or 0) + amount,
-		}
-	end,
-	SetCoins = function(player_state, amount: number)
-		return {
-			Coins = amount,
-		}
-	end,
+local PlayerData = Craftsman.Store.CreatePlayerProducer(Config.DATA.TEMPLATE)({
+	DispatchTestAction = function(state, value)
+		return { TestField = value }
+	end
 })
+
 return PlayerData

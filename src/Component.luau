@@ -63,7 +63,7 @@ function Component:LoadModulesAsync(modules: Instance)
 	for index = 1, #ordered_descendants do
 		local module_entry = ordered_descendants[index]
 		local module = module_entry.module
-		if not module:IsA("ModuleScript") then
+		if not module:IsA("ModuleScript") or module.Name:match("%.spec$") then
 			continue
 		end
 
@@ -77,7 +77,7 @@ function Component:LoadModulesAsync(modules: Instance)
 				return
 			end
 
-			if module_contents.Init and type(module_contents.Init) == "function" then
+			if type(module_contents) == "table" and module_contents.Init and type(module_contents.Init) == "function" then
 				local init_ok, init_err = pcall(module_contents.Init, module_contents)
 				if not init_ok then
 					PrintUtil:Warn(`Error in Init of module {module_name}:`, init_err)
@@ -99,7 +99,7 @@ function Component:LoadModulesAsync(modules: Instance)
 				loaded_modules[module_name] = module_contents
 				self.Modules[module_name] = module_contents
 				self.LoadedModules[module_name] = module_contents
-				if module_contents.Start and type(module_contents.Start) == "function" then
+				if type(module_contents) == "table" and module_contents.Start and type(module_contents.Start) == "function" then
 					Promise.try(module_contents.Start, module_contents)
 						:catch(function(err)
 							PrintUtil:Warn(`Error in Start of module {module_name}:`, err.error)

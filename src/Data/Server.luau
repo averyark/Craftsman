@@ -216,21 +216,34 @@ Data.Loaded = {
 		return conn
 	end,
 	Once = function(self, fn)
+		local fired = false
+		local conn
+
+		local function fire_once(player, state)
+			if fired then
+				return
+			end
+			fired = true
+			if conn then
+				conn:Disconnect()
+			end
+			fn(player, state)
+		end
+
+		-- Listen for the next load. Guarded by `fired` so a replayed already-loaded
+		-- player and a future load can never both invoke the callback.
+		conn = RealLoadedSignal:Connect(fire_once)
+
 		for player, record in PlayerRecords do
 			if not record.Loaded then
 				continue
 			end
 
-			task.spawn(fn, player, Data:GetPlayerState(player))
-
-			return {
-				Disconnect = function() end,
-				Destroy = function() end,
-				Connected = false,
-			}
+			task.spawn(fire_once, player, Data:GetPlayerState(player))
+			break
 		end
 
-		return RealLoadedSignal:Once(fn)
+		return conn
 	end,
 	Wait = function(self)
 		for player, record in PlayerRecords do

@@ -11,6 +11,7 @@ const TweenService = game:GetService("TweenService")
 const Promise = require("../../../../Promise")
 const Spr = require("../../../../Spr")
 const PrintUtil = require("./PrintUtil")
+const TableUtil = require("./TableUtil")
 
 --[=[
 	@class TweenUtil
@@ -174,6 +175,7 @@ local function create_tween_group(tweens: { Tween })
 	return self
 end
 
+
 --[=[
 	Registers a reusable animation template. Supports standard TweenService or Spr spring configurations.
 	@param name string -- The name key for this template.
@@ -191,7 +193,7 @@ function TweenUtil.new(
 	duration_or_damping: number?,
 	direction_or_frequency: any?
 )
-	local config = {
+	local config: { [string]: any } = {
 		Properties = properties,
 	}
 
@@ -199,14 +201,45 @@ function TweenUtil.new(
 		config.Type = "Spring"
 		config.Damping = duration_or_damping or 1.0
 		config.Frequency = direction_or_frequency or 8.0
-		TweenTemplates[name] = config
-		return config
+	else
+		config.Type = "Tween"
+		config.Style = style_or_type or Enum.EasingStyle.Quad
+		config.Duration = duration_or_damping or 0.3
+		config.Direction = direction_or_frequency or Enum.EasingDirection.Out
 	end
 
-	config.Type = "Tween"
-	config.Style = style_or_type or Enum.EasingStyle.Quad
-	config.Duration = duration_or_damping or 0.3
-	config.Direction = direction_or_frequency or Enum.EasingDirection.Out
+	local existing_config = TweenTemplates[name]
+	if existing_config then
+		local is_match = true
+		if config.Type ~= existing_config.Type then
+			is_match = false
+		elseif config.Type == "Spring" then
+			if config.Damping ~= existing_config.Damping or config.Frequency ~= existing_config.Frequency then
+				is_match = false
+			end
+		else
+			if
+				config.Style ~= existing_config.Style
+				or config.Duration ~= existing_config.Duration
+				or config.Direction ~= existing_config.Direction
+			then
+				is_match = false
+			end
+		end
+
+		if is_match then
+			if not TableUtil.EqualDeep(config.Properties, existing_config.Properties) then
+				is_match = false
+			end
+		end
+
+		if is_match then
+			PrintUtil:Warn(`Template "{name}" already exists with identical parameters. Ignoring new definition.`)
+			return existing_config
+		else
+			error(`Template "{name}" already exists with different parameters or properties. Name clashes are not allowed.`, 2)
+		end
+	end
 
 	TweenTemplates[name] = config
 	return config

@@ -23,7 +23,11 @@ export type Machine = Types.Machine
 local MachinesById = (setmetatable({}, { __mode = "v" }) :: any) :: { [string]: Machine }
 local MachineIdsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: string }
 local ClientConnectionsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: any }
-local SuppressClientSendByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: boolean }
+-- Sentinel used as the transition `source` for server-applied transitions, so the client's own
+-- Transitioned listener can identify and skip echoing them back to the server. Unlike a boolean
+-- suppress flag, this survives transitions that are queued and applied later via task.defer,
+-- because the machine preserves `source` through its pending-transition queue.
+local SERVER_SOURCE = newproxy(false)
 local DestroyConnectionsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: any }
 local CachedStatesByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: { [string]: any } }
 local LastSequenceByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: number }
@@ -92,42 +96,35 @@ local function apply_payload(machine: Machine, payload: { [string]: any })
 	end
 	--
 
-	SuppressClientSendByMachine[machine] = true
 	local running = payload.Running == true
 	local state_name = payload.State
 	local context = payload.Context
 
 	if not running then
 		if machine:IsRunning() then
-			machine:Stop(context)
+			machine:Stop(context, SERVER_SOURCE)
 		end
-		SuppressClientSendByMachine[machine] = nil
 		return
 	end
 
 	if type(state_name) ~= "string" then
-		SuppressClientSendByMachine[machine] = nil
 		return
 	end
 
 	local target = resolve_cached_state(machine, state_name)
 	if target == nil then
-		SuppressClientSendByMachine[machine] = nil
 		return
 	end
 
 	if not machine:IsRunning() then
 		machine:SetInitial(target)
-		machine:Start(context)
-		SuppressClientSendByMachine[machine] = nil
+		machine:Start(context, SERVER_SOURCE)
 		return
 	end
 
 	if machine:GetCurrent() ~= target then
-		machine:Transition(target, context)
+		machine:Transition(target, context, SERVER_SOURCE)
 	end
-
-	SuppressClientSendByMachine[machine] = nil
 end
 
 local function request_state(machine_id: string, machine: Machine)
@@ -160,7 +157,7 @@ local function ensure_client_connection(machine: Machine, machine_id: string)
 
 	ClientConnectionsByMachine[machine] = machine.Transitioned:Connect(
 		function(_machine, _previous, _current, context, _source)
-			if SuppressClientSendByMachine[_machine] then
+			if _source == SERVER_SOURCE then
 				return
 			end
 
@@ -256,7 +253,6 @@ function Client:Unregister(machine: Machine): boolean
 	MachineIdsByMachine[machine] = nil
 	MachinesById[machine_id] = nil
 	ClientConnectionsByMachine[machine] = nil
-	SuppressClientSendByMachine[machine] = nil
 	DestroyConnectionsByMachine[machine] = nil
 	CachedStatesByMachine[machine] = nil
 	LastSequenceByMachine[machine] = nil

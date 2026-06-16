@@ -58,9 +58,12 @@ function AnimationUtil.QuickPlay(
 		track.Priority = safe_props.Priority
 	end
 
-	if safe_props.Looped ~= nil then
-		track.Looped = safe_props.Looped
+	-- QuickPlay is fire-and-forget and self-destroys on Ended, which never fires for a looped
+	-- track. Force non-looped so the track and cloned animation cannot leak.
+	if safe_props.Looped then
+		PrintUtil:Warn("AnimationUtil.QuickPlay does not support looped animations; ignoring Looped.")
 	end
+	track.Looped = false
 	--
 
 	track.Ended:Once(function()
@@ -172,8 +175,18 @@ function Animate.Load(
 
 		local track = self.Container:LoadAnimation(clone)
 
-		self.AnimationCache[param.AnimationName or param.FromRegistry] = clone
-		self.Tracks[param.AnimationName or param.FromRegistry] = track
+		-- Tear down any track/animation previously loaded under this name to avoid leaking it.
+		local existing_name = param.AnimationName or param.FromRegistry
+		if self.Tracks[existing_name] then
+			self.Tracks[existing_name]:Stop()
+			self.Tracks[existing_name]:Destroy()
+		end
+		if self.AnimationCache[existing_name] then
+			self.AnimationCache[existing_name]:Destroy()
+		end
+
+		self.AnimationCache[existing_name] = clone
+		self.Tracks[existing_name] = track
 
 		--
 		if param.ShouldPreload and RunService:IsClient() then
@@ -205,6 +218,15 @@ function Animate.Load(
 
 	--
 	local track = self.Container:LoadAnimation(animation)
+
+	-- Tear down any track/animation previously loaded under this name to avoid leaking it.
+	if self.Tracks[param.AnimationName] then
+		self.Tracks[param.AnimationName]:Stop()
+		self.Tracks[param.AnimationName]:Destroy()
+	end
+	if self.AnimationCache[param.AnimationName] then
+		self.AnimationCache[param.AnimationName]:Destroy()
+	end
 
 	self.AnimationCache[param.AnimationName] = animation
 	self.Tracks[param.AnimationName] = track
@@ -300,7 +322,7 @@ function Animate.Destroy(self: Animate)
 	self.Container = nil
 end
 
-function Animate.GetSharedAnimate(container: Animator | Humanoid | Model | AnimationController): Animate
+function AnimationUtil.GetSharedAnimate(container: Animator | Humanoid | Model | AnimationController): Animate
 	--
 	if GlobalAnimate[container] then
 		return GlobalAnimate[container]
@@ -319,11 +341,11 @@ function Animate.GetSharedAnimate(container: Animator | Humanoid | Model | Anima
 	return animate
 end
 
-function Animate.GetLocalAnimate()
+function AnimationUtil.GetLocalAnimate()
 	--
 	local player = Players.LocalPlayer
 	if not player then
-		PrintUtil:Error("Animate.GetLocalAnimate: No local player found.", 2)
+		PrintUtil:Error("AnimationUtil.GetLocalAnimate: No local player found.", 2)
 	end
 
 	local character = player.Character
@@ -332,7 +354,7 @@ function Animate.GetLocalAnimate()
 	end
 	--
 
-	return Animate.GetSharedAnimate(character)
+	return AnimationUtil.GetSharedAnimate(character)
 end
 
 AnimationUtil.new = new

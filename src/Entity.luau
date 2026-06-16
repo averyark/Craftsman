@@ -43,20 +43,20 @@ local function new(entity: Instance, player: Player?)
 		EntityModule.Entities[entity] = nil
 	end)
 
-	entity.AncestryChanged:Connect(function()
+	self.Keeper:Add(entity.AncestryChanged:Connect(function()
 		if entity:IsDescendantOf(game) then
 			return
 		end
 		EntityModule.Died:Fire(self)
 		self.Keeper:Destroy()
-	end)
+	end))
 
 	EntityModule.Spawned:Fire(self)
 
-	self.Humanoid.Died:Connect(function()
+	self.Keeper:Add(self.Humanoid.Died:Connect(function()
 		EntityModule.Died:Fire(self)
 		self.Keeper:Destroy()
-	end)
+	end))
 
 	return self
 end

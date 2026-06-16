@@ -328,10 +328,15 @@ end
 	Retrieves the unique tag instance ID associated with a specific tag NumberValue object.
 ]=]
 function TagClass.GetTagId(self: Tag, instance: Instance, tag_object: NumberValue): string?
-	for id, current_tag in self.Tagged do
-		if current_tag == tag_object then
-			return id
-		end
+	if tag_object == nil then
+		return nil
+	end
+
+	-- The id is stamped onto the value object at creation (see create_tag_value), so this is an
+	-- O(1) lookup. Validate it still maps to the same object before trusting it.
+	local id = tag_object:GetAttribute("TagId")
+	if type(id) == "string" and self.Tagged[id] == tag_object then
+		return id
 	end
 
 	return nil

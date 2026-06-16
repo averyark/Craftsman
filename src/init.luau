@@ -30,8 +30,6 @@ if RunService:IsServer() then
 	StoreServer = require("@self/Store/Server")
 end
 
-const ReplicatedStorage = game:GetService("ReplicatedStorage")
-
 const Entity = require("@self/Entity")
 const Pathfind = require("@self/Pathfind")
 
@@ -81,44 +79,7 @@ local Craftsman = {
 	Store = Store, -- Store Utility
 }
 
--- Automatically load custom configuration if it exists
-local custom_config_instance = ReplicatedStorage:FindFirstChild("CraftsmanConfig")
-	or ReplicatedStorage:FindFirstChild("CraftmansConfig")
-
-if custom_config_instance and custom_config_instance:IsA("ModuleScript") then
-	local success, custom_config = pcall(require, custom_config_instance)
-	if success and type(custom_config) == "table" then
-		-- Apply configuration
-		if
-			custom_config.TEMPLATE ~= nil
-			or custom_config.KEYS ~= nil
-			or custom_config.PRODUCTS ~= nil
-			or custom_config.GAMEPASSES ~= nil
-		then
-			if custom_config.TEMPLATE ~= nil then
-				Config.DATA.TEMPLATE = custom_config.TEMPLATE
-			end
-			if custom_config.KEYS ~= nil then
-				Config.MARKET.KEYS = custom_config.KEYS
-			end
-			if custom_config.PRODUCTS ~= nil then
-				Config.MARKET.PRODUCTS = custom_config.PRODUCTS
-			end
-			if custom_config.GAMEPASSES ~= nil then
-				Config.MARKET.GAMEPASSES = custom_config.GAMEPASSES
-			end
-		elseif
-			custom_config.DATA ~= nil
-			or custom_config.MARKET ~= nil
-			or custom_config.STATE_MACHINE ~= nil
-			or custom_config.MODULE_LOAD_ORDER ~= nil
-		then
-			local merged = TableUtil.DeepMerge(Config, custom_config)
-			for k, v in merged do
-				(Config :: any)[k] = v
-			end
-		end
-	end
-end
+-- Custom configuration (ReplicatedStorage.CraftsmanConfig) is merged into the defaults
+-- by Config.luau at load time. That is the single source of truth; do not re-merge here.
 
 return Craftsman

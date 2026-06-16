@@ -17,6 +17,33 @@ local InputUtil = {}
 
 local ActionBindings = {}
 local ActiveActions = {}
+-- Reverse index: input key -> set of action names bound to it, so input events are O(1).
+local ActionsByKey = {}
+
+local function unindex_action(action_name)
+	local key_array = ActionBindings[action_name]
+	if not key_array then
+		return
+	end
+	for i = 1, #key_array do
+		local actions = ActionsByKey[key_array[i]]
+		if actions then
+			actions[action_name] = nil
+		end
+	end
+end
+
+local function index_action(action_name, key_array)
+	for i = 1, #key_array do
+		local key = key_array[i]
+		local actions = ActionsByKey[key]
+		if actions == nil then
+			actions = {}
+			ActionsByKey[key] = actions
+		end
+		actions[action_name] = true
+	end
+end
 
 --[=[
 	@prop Began Signal -- Fired when a bound action begins.
@@ -39,8 +66,10 @@ InputUtil.Ended = Signal.new()
 ]=]
 --
 function InputUtil.BindAction(action_name, key_array)
+	unindex_action(action_name)
 	ActionBindings[action_name] = key_array
 	ActiveActions[action_name] = false
+	index_action(action_name, key_array)
 end
 
 --[=[
@@ -49,6 +78,7 @@ end
 ]=]
 --
 function InputUtil.UnbindAction(action_name)
+	unindex_action(action_name)
 	ActionBindings[action_name] = nil
 	ActiveActions[action_name] = nil
 end
@@ -135,21 +165,12 @@ local function process_input(input_object, is_began)
 
 	local target_key = (key_code == Enum.KeyCode.Unknown) and user_input_type or key_code
 
-	for action_name, key_array in ActionBindings do
-		local is_match = false
+	local actions = ActionsByKey[target_key]
+	if actions == nil then
+		return
+	end
 
-		for i = 1, #key_array do
-			local bound_key = key_array[i]
-			if bound_key == target_key then
-				is_match = true
-				break
-			end
-		end
-
-		if not is_match then
-			continue
-		end
-
+	for action_name in actions do
 		ActiveActions[action_name] = is_began
 		InputStore.SetActionActive(action_name, is_began)
 

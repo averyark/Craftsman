@@ -184,6 +184,10 @@ local function apply_definition(player, definition, context)
 		return nil, false, "MissingHandler"
 	end
 
+	-- Snapshot the player's state before granting. Producer actions are immutable
+	-- (each clones), so this reference stays a valid pre-grant snapshot for rollback.
+	local state_snapshot = state
+
 	local ok, result, reason = pcall(handler, player, definition, context)
 	if not ok then
 		return nil, false, result
@@ -199,6 +203,11 @@ local function apply_definition(player, definition, context)
 
 	local save_ok, save_error = DataServer:SavePlayer(player):await()
 	if not save_ok then
+		-- Roll back the in-memory grant and receipt so the receipt's idempotency check
+		-- does not block (and silently drop) Roblox's retry of this purchase.
+		if state_snapshot then
+			Market.Producer._LoadPlayer(tostring(player.UserId), state_snapshot)
+		end
 		return nil, false, save_error
 	end
 
