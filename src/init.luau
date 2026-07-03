@@ -43,13 +43,13 @@ const Store = require("@self/Store")
 local Craftsman = {
 	Component = Component, -- Module Loader
 	Debounce = Debounce, -- Debouncing and Throttling
-	Concurrency = Concurrency, -- Keyed Concurrency Control (AsyncLock & KeyedDebounce)
+	Concurrency = Concurrency, -- Keyed Concurrency Control (AsyncLock and KeyedDebounce)
 	Queue = Queue, -- Task Queue System,
 	State = State, -- State Machine State
 	Machine = Machine, -- State Machine
-	Pathfind = Pathfind,
+	Pathfind = Pathfind, -- Simple Pathfinding, cover most usecases
 
-	Entity = Entity,
+	Entity = Entity, -- Character or NPC abstraction
 
 	DataServer = DataServer, -- Server Data Manipulation
 	DataClient = DataClient, -- Client Data Access

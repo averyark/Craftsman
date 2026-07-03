@@ -73,6 +73,9 @@ local function reconcile_template(template: PlayerState, value: PlayerState): bo
 end
 
 local function validate_state(value: PlayerState): (PlayerState?, string?)
+
+	reconcile_template(DataConfig.TEMPLATE, value)
+
 	if Schema then
 		local ok, cause = Schema:matches(value)
 		if not ok then
