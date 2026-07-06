@@ -32,6 +32,7 @@ end
 
 const Entity = require("@self/Entity")
 const Pathfind = require("@self/Pathfind")
+const Spring = require("@self/Spring")
 
 local StateMachine = require("@self/StateMachine")
 local Machine = require("@self/StateMachine/Machine")
@@ -48,6 +49,7 @@ local Craftsman = {
 	State = State, -- State Machine State
 	Machine = Machine, -- State Machine
 	Pathfind = Pathfind, -- Simple Pathfinding, cover most usecases
+	Spring = Spring, -- Spring System
 
 	Entity = Entity, -- Character or NPC abstraction
 
