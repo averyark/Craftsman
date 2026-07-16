@@ -19,6 +19,11 @@ EntityModule.Entities = {}
 local Entity = {}
 Entity.__index = Entity
 
+-- How long the constructor waits for a rig's Humanoid/HumanoidRootPart before giving up.
+-- Unbounded WaitForChild means a rig that never gets one hangs Entity.new forever, with
+-- no error and no way for the caller to recover.
+local RIG_WAIT_TIMEOUT = 5
+
 EntityModule.Spawned = Signal.new()
 EntityModule.Died = Signal.new()
 EntityModule.Removing = Signal.new()
@@ -34,8 +39,19 @@ local function new(entity: Instance, player: Player?)
 
 	self.Instance = entity
 	self.Player = player or Players:GetPlayerFromCharacter(self.Instance)
-	self.Humanoid = entity:WaitForChild("Humanoid")
-	self.HumanoidRootPart = entity:WaitForChild("HumanoidRootPart")
+	self.Humanoid = entity:WaitForChild("Humanoid", RIG_WAIT_TIMEOUT)
+	self.HumanoidRootPart = entity:WaitForChild("HumanoidRootPart", RIG_WAIT_TIMEOUT)
+
+	-- A rig missing either part used to hang here forever. Failing loudly is recoverable:
+	-- the caller can pcall it, and the message names the offending rig.
+	if not self.Humanoid then
+		PrintUtil:Error(`Entity.new: {entity:GetFullName()} has no Humanoid after {RIG_WAIT_TIMEOUT}s.`, 2)
+	end
+
+	if not self.HumanoidRootPart then
+		PrintUtil:Error(`Entity.new: {entity:GetFullName()} has no HumanoidRootPart after {RIG_WAIT_TIMEOUT}s.`, 2)
+	end
+
 	self.Keeper = Keeper.new()
 
 	EntityModule.Entities[entity] = self
@@ -59,6 +75,37 @@ local function new(entity: Instance, player: Player?)
 	end))
 
 	return self
+end
+
+--[=[
+	Returns the entity's Humanoid, or nil if the rig has none.
+
+	Never yields, unlike the `.Humanoid` field's `WaitForChild` in the constructor, and
+	reads the rig as it is now rather than as it was at construction -- so it stays correct
+	across a rig whose Humanoid is replaced or destroyed.
+
+	@return Humanoid? -- The Humanoid, or nil.
+]=]
+--
+function Entity:GetHumanoid(): Humanoid?
+	return self.Instance:FindFirstChildWhichIsA("Humanoid")
+end
+
+--[=[
+	Returns the entity's root part, or nil if the rig has none.
+
+	Prefers HumanoidRootPart and falls back to the model's PrimaryPart. Never yields.
+
+	@return BasePart? -- The root part, or nil.
+]=]
+--
+function Entity:GetRoot(): BasePart?
+	local root = self.Instance:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		return root
+	end
+
+	return self.Instance.PrimaryPart
 end
 
 function Entity:Destroy()

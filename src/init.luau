@@ -1,87 +1,174 @@
+--!nonstrict
 const RunService = game:GetService("RunService")
 
-const Component = require("@self/Component")
-const Config = require("@self/Config")
-local DataServer = nil
-local DataClient = require("@self/Data/Client")
-local MarketServer = nil
-local MarketClient = require("@self/Market/Client")
-local StateMachineServer = nil
-local StateMachineClient = require("@self/StateMachine/Client")
-local StoreServer = nil
-local StoreClient = require("@self/Store/Client")
-const Queue = require("@self/Queue")
-const StringUtil = require("@self/Utilities/StringUtil")
-const AnimationUtil = require("@self/Utilities/AnimationUtil")
-const InputUtil = require("@self/Utilities/InputUtil")
-const MathUtil = require("@self/Utilities/MathUtil")
-const PrintUtil = require("@self/Utilities/PrintUtil")
-const SoundUtil = require("@self/Utilities/SoundUtil")
-const TableUtil = require("@self/Utilities/TableUtil")
-const TweenUtil = require("@self/Utilities/TweenUtil")
-const Tag = require("@self/Tag")
-const Debounce = require("@self/Debounce")
-const Concurrency = require("@self/Concurrency")
+export type Craftsman = {
+	Component: typeof(require("@self/Component")), -- Module Loader
+	Debounce: typeof(require("@self/Debounce")), -- Debouncing and Throttling
+	Concurrency: typeof(require("@self/Concurrency")), -- Keyed Concurrency Control (AsyncLock and KeyedDebounce)
+	Queue: typeof(require("@self/Queue")), -- Task Queue System
+	State: typeof(require("@self/StateMachine/State")), -- State Machine State
+	Machine: typeof(require("@self/StateMachine/Machine")), -- State Machine
+	Pathfind: typeof(require("@self/Pathfind")), -- Simple Pathfinding, cover most usecases
+	Spring: typeof(require("@self/Spring")), -- Spring System
 
-if RunService:IsServer() then
-	DataServer = require("@self/Data/Server")
-	MarketServer = require("@self/Market/Server")
-	StateMachineServer = require("@self/StateMachine/Server")
-	StoreServer = require("@self/Store/Server")
-end
+	Entity: typeof(require("@self/Entity")), -- Character or NPC abstraction
 
-const Entity = require("@self/Entity")
-const Pathfind = require("@self/Pathfind")
-const Spring = require("@self/Spring")
+	DataServer: typeof(require("@self/Data/Server")), -- Server Data Manipulation
+	DataClient: typeof(require("@self/Data/Client")), -- Client Data Access
+	MarketServer: typeof(require("@self/Market/Server")), -- Server Marketplace Logic
+	MarketClient: typeof(require("@self/Market/Client")), -- Client Marketplace Access
+	StateMachine: typeof(require("@self/StateMachine")), -- State Machine Namespace
+	StateMachineServer: typeof(require("@self/StateMachine/Server")), -- Server State Machine Replication
+	StateMachineClient: typeof(require("@self/StateMachine/Client")), -- Client State Machine Replication
 
-local StateMachine = require("@self/StateMachine")
-local Machine = require("@self/StateMachine/Machine")
+	StoreServer: typeof(require("@self/Store/Server")), -- Server Store Replication
+	StoreClient: typeof(require("@self/Store/Client")), -- Client Store Replication
 
-local State = require("@self/StateMachine/State")
-const WorldUtil = require("@self/Utilities/WorldUtil")
-const Store = require("@self/Store")
+	InputUtil: typeof(require("@self/Utilities/InputUtil")), -- User Input Handling
+	InterfaceUtil: typeof(require("@self/Utilities/InterfaceUtil")), -- Interface Scaling
+	PrintUtil: typeof(require("@self/Utilities/PrintUtil")), -- Debugging and Printing
+	TableUtil: typeof(require("@self/Utilities/TableUtil")), -- Table Manipulation Utilities
+	WorldUtil: typeof(require("@self/Utilities/WorldUtil")), -- World and Instance Utilities
 
-local Craftsman = {
-	Component = Component, -- Module Loader
-	Debounce = Debounce, -- Debouncing and Throttling
-	Concurrency = Concurrency, -- Keyed Concurrency Control (AsyncLock and KeyedDebounce)
-	Queue = Queue, -- Task Queue System,
-	State = State, -- State Machine State
-	Machine = Machine, -- State Machine
-	Pathfind = Pathfind, -- Simple Pathfinding, cover most usecases
-	Spring = Spring, -- Spring System
+	AnimationUtil: typeof(require("@self/Utilities/AnimationUtil")), -- Animation Handling
+	SoundUtil: typeof(require("@self/Utilities/SoundUtil")), -- Sound Handling
+	TweenUtil: typeof(require("@self/Utilities/TweenUtil")), -- Tween Handling
+	Tag: typeof(require("@self/Tag")), -- Instance Tag Utility
 
-	Entity = Entity, -- Character or NPC abstraction
+	MathUtil: typeof(require("@self/Utilities/MathUtil")), -- Math Utilities
+	StringUtil: typeof(require("@self/Utilities/StringUtil")), -- String Utilities
 
-	DataServer = DataServer, -- Server Data Manipulation
-	DataClient = DataClient, -- Client Data Access
-	MarketServer = MarketServer, -- Server Marketplace Logic
-	MarketClient = MarketClient, -- Client Marketplace Access
-	StateMachine = StateMachine, -- State Machine Namespace
-	StateMachineServer = StateMachineServer, -- Server State Machine Replication
-	StateMachineClient = StateMachineClient, -- Client State Machine Replication
-
-	StoreServer = StoreServer, -- Server Store Replication
-	StoreClient = StoreClient, -- Client Store Replication
-
-	InputUtil = InputUtil, -- User Input Handling
-	PrintUtil = PrintUtil, -- Debugging and Printing
-	TableUtil = TableUtil, -- Table Manipulation Utilities
-	WorldUtil = WorldUtil, -- World and Instance Utilities
-
-	AnimationUtil = AnimationUtil, -- Animation Handling
-	SoundUtil = SoundUtil, -- Sound Handling
-	TweenUtil = TweenUtil, -- Tween Handling
-	Tag = Tag, -- Instance Tag Utility
-
-	MathUtil = MathUtil, -- Math Utilities
-	StringUtil = StringUtil, -- String Utilities
-
-	Config = Config, -- Configuration Management
-	Store = Store, -- Store Utility
+	Config: typeof(require("@self/Config")), -- Configuration Management
+	Store: typeof(require("@self/Store")), -- Store Utility
 }
 
--- Custom configuration (ReplicatedStorage.CraftsmanConfig) is merged into the defaults
--- by Config.luau at load time. That is the single source of truth; do not re-merge here.
+local loaders: { [string]: () -> any } = {
+	Component = function()
+		return require("@self/Component")
+	end,
+	Debounce = function()
+		return require("@self/Debounce")
+	end,
+	Concurrency = function()
+		return require("@self/Concurrency")
+	end,
+	Queue = function()
+		return require("@self/Queue")
+	end,
+	State = function()
+		return require("@self/StateMachine/State")
+	end,
+	Machine = function()
+		return require("@self/StateMachine/Machine")
+	end,
+	Pathfind = function()
+		return require("@self/Pathfind")
+	end,
+	Spring = function()
+		return require("@self/Spring")
+	end,
 
-return Craftsman
+	Entity = function()
+		return require("@self/Entity")
+	end,
+
+	DataServer = function()
+		return require("@self/Data/Server")
+	end,
+	DataClient = function()
+		return require("@self/Data/Client")
+	end,
+	MarketServer = function()
+		return require("@self/Market/Server")
+	end,
+	MarketClient = function()
+		return require("@self/Market/Client")
+	end,
+	StateMachine = function()
+		return require("@self/StateMachine")
+	end,
+	StateMachineServer = function()
+		return require("@self/StateMachine/Server")
+	end,
+	StateMachineClient = function()
+		return require("@self/StateMachine/Client")
+	end,
+
+	StoreServer = function()
+		return require("@self/Store/Server")
+	end,
+	StoreClient = function()
+		return require("@self/Store/Client")
+	end,
+
+	InterfaceUtil = function()
+		return require("@self/Utilities/InterfaceUtil")
+	end,
+	InputUtil = function()
+		return require("@self/Utilities/InputUtil")
+	end,
+	PrintUtil = function()
+		return require("@self/Utilities/PrintUtil")
+	end,
+	TableUtil = function()
+		return require("@self/Utilities/TableUtil")
+	end,
+	WorldUtil = function()
+		return require("@self/Utilities/WorldUtil")
+	end,
+
+	AnimationUtil = function()
+		return require("@self/Utilities/AnimationUtil")
+	end,
+	SoundUtil = function()
+		return require("@self/Utilities/SoundUtil")
+	end,
+	TweenUtil = function()
+		return require("@self/Utilities/TweenUtil")
+	end,
+	Tag = function()
+		return require("@self/Tag")
+	end,
+
+	MathUtil = function()
+		return require("@self/Utilities/MathUtil")
+	end,
+	StringUtil = function()
+		return require("@self/Utilities/StringUtil")
+	end,
+
+	Config = function()
+		return require("@self/Config")
+	end,
+	Store = function()
+		return require("@self/Store")
+	end,
+}
+
+local SERVER_ONLY = {
+	DataServer = true,
+	MarketServer = true,
+	StateMachineServer = true,
+	StoreServer = true,
+}
+
+local IS_SERVER = RunService:IsServer()
+
+local Craftsman = setmetatable({}, {
+	__index = function(self, key)
+		local loader = loaders[key]
+		if loader == nil then
+			return nil
+		end
+
+		if SERVER_ONLY[key] and not IS_SERVER then
+			return nil
+		end
+
+		local module = loader()
+		rawset(self, key, module)
+		return module
+	end,
+})
+
+return (Craftsman :: any) :: Craftsman

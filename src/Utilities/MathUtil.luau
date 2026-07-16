@@ -313,6 +313,37 @@ function MathUtil.ShortestAngle(current_angle, target_angle)
 end
 
 --[=[
+	Returns the shortest angular distance in radians between two angles (-pi to pi).
+
+	The radian-native counterpart to `ShortestAngle`. `CFrame` and `math.atan2` are
+	radian, so prefer this over wrapping the degree version in `math.rad`/`math.deg`.
+
+	@param current_angle number -- The current angle in radians.
+	@param target_angle number -- The target angle in radians.
+	@return number -- The shortest angular difference in radians.
+]=]
+--
+function MathUtil.ShortestAngleRad(current_angle, target_angle)
+	return (target_angle - current_angle + math.pi) % (2 * math.pi) - math.pi
+end
+
+--[=[
+	Moves an angle towards a target by a fraction of the shortest path, in radians.
+
+	Takes the short way around: approaching 0.1 from 6.2 rad steps forwards through the
+	wrap rather than backwards across the circle.
+
+	@param current_angle number -- The current angle in radians.
+	@param target_angle number -- The target angle in radians.
+	@param alpha number -- How far to move, 0 (stay) to 1 (arrive).
+	@return number -- The interpolated angle in radians.
+]=]
+--
+function MathUtil.ApproachAngle(current_angle, target_angle, alpha)
+	return current_angle + MathUtil.ShortestAngleRad(current_angle, target_angle) * alpha
+end
+
+--[=[
 	Calculates a point along a quadratic Bezier curve.
 	@param t number -- The interpolation fraction (0 to 1).
 	@param p0 Vector3 -- The starting point.

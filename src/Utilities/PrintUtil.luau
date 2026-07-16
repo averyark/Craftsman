@@ -110,17 +110,23 @@ end
 
 --[=[
 	Throws an error prefixed by the caller module name.
-	@param ... any -- The error message parameters.
+
+	`level` means what it means for `error`, counted from the call site: `1` (the default)
+	blames the line that called `Error`, `2` blames that line's caller -- useful when the
+	fault is bad input to a public method rather than the method itself -- and `0` omits
+	position information. This function's own frame is never blamed.
+
+	@param message any -- The error message.
+	@param level number? -- Which frame to blame. Defaults to 1.
 ]=]
 --
-function PrintUtil:Error(...)
-	local args = { ... }
-	local formatted_args = {}
-	for i, arg in args do
-		formatted_args[i] = tostring(arg)
-	end
-	local message = table.concat(formatted_args, " ")
-	error(get_formatted_prefix_and_suffix(message))
+function PrintUtil:Error(message, level: number?)
+	local formatted = get_formatted_prefix_and_suffix(tostring(message))
+	local blame = level or 1
+
+	-- `error` counts frames from itself, so shift by one to skip this function. Without
+	-- that, every level would be off by one and point back into PrintUtil.
+	error(formatted, if blame > 0 then blame + 1 else 0)
 end
 
 --[=[

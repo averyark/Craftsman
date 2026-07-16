@@ -8,9 +8,10 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+const Craftsman = require("../Packages/_TestIndex/averyark_craftsman@dev/Craftsman")
+const AnimationUtil = require("../Packages/_TestIndex/averyark_craftsman@dev/Craftsman/Utilities/AnimationUtil")
+
 local test = {}
-
-
 
 
 return test
