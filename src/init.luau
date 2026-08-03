@@ -25,6 +25,7 @@ export type Craftsman = {
 	StoreClient: typeof(require("@self/Store/Client")), -- Client Store Replication
 
 	InputUtil: typeof(require("@self/Utilities/InputUtil")), -- User Input Handling
+	TouchUtil: typeof(require("@self/Utilities/TouchUtil")), -- On-screen Touch Buttons
 	InterfaceUtil: typeof(require("@self/Utilities/InterfaceUtil")), -- Interface Scaling
 	PrintUtil: typeof(require("@self/Utilities/PrintUtil")), -- Debugging and Printing
 	TableUtil: typeof(require("@self/Utilities/TableUtil")), -- Table Manipulation Utilities
@@ -106,6 +107,9 @@ local loaders: { [string]: () -> any } = {
 	end,
 	InputUtil = function()
 		return require("@self/Utilities/InputUtil")
+	end,
+	TouchUtil = function()
+		return require("@self/Utilities/TouchUtil")
 	end,
 	PrintUtil = function()
 		return require("@self/Utilities/PrintUtil")
