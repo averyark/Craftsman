@@ -71,6 +71,7 @@ export type ButtonOptions = {
 	Overlay: string?,
 	OverlayTransparency: number?,
 	OverlayScale: number?,
+	OverlayOffset: number?,
 	Text: string?,
 	Zone: Zone?,
 	Order: number?,
@@ -278,7 +279,7 @@ local function ensure_overlay(self: any): ImageLabel
 	overlay.ScaleType = Enum.ScaleType.Fit
 	overlay.AnchorPoint = CENTRE_ANCHOR
 	overlay.Position = UDim2.fromScale(0.5, 0.5)
-	overlay.Size = UDim2.fromScale(self._OverlayScale, self._OverlayScale)
+	overlay.Size = UDim2.new(self._OverlayScale, self._OverlayOffset, self._OverlayScale, self._OverlayOffset)
 	overlay.ImageTransparency = overlay_transparency(self)
 	overlay.ZIndex = self.Instance.ZIndex + 1
 	overlay.Parent = self.Instance
@@ -1013,6 +1014,7 @@ local function new(action_name: string, options: ButtonOptions?)
 	self.Overlay = given.Overlay
 	self._OverlayTransparency = given.OverlayTransparency or TouchConfig.OVERLAY_TRANSPARENCY
 	self._OverlayScale = given.OverlayScale or TouchConfig.OVERLAY_SCALE
+	self._OverlayOffset = given.OverlayOffset or TouchConfig.OVERLAY_OFFSET
 
 	if self.Overlay then
 		ensure_overlay(self).Image = self.Overlay
@@ -1433,7 +1435,24 @@ function TouchButton.SetOverlayScale(self: TouchButton, scale: number): TouchBut
 	self._OverlayScale = scale
 
 	if self._Overlay then
-		self._Overlay.Size = UDim2.fromScale(scale, scale)
+		self._Overlay.Size = UDim2.new(scale, self._OverlayOffset, scale, self._OverlayOffset)
+	end
+
+	return self
+end
+
+--[=[
+	Sets the overlay's offset in pixels.
+
+	@param offset number -- Added to the scale calculation to size the overlay.
+	@return TouchButton -- Self, for chaining.
+]=]
+--
+function TouchButton.SetOverlayOffset(self: TouchButton, offset: number): TouchButton
+	self._OverlayOffset = offset
+
+	if self._Overlay then
+		self._Overlay.Size = UDim2.new(self._OverlayScale, offset, self._OverlayScale, offset)
 	end
 
 	return self
