@@ -27,6 +27,10 @@ const FALLBACK_CONFIG = {
 	AGENT_COSTS = {},
 
 	WAYPOINT_SPACING = 4,
+	WAYPOINT_ARRIVAL_RADIUS = 1.5,
+	WAYPOINT_ADVANCE_RADIUS = 2.8,
+	STUCK_TIMEOUT = 2, -- seconds stationary before recomputing path
+	STALL_TIMEOUT = 2, -- legacy alias for STUCK_TIMEOUT
 	PARTIAL_PATH = true,
 
 	VISUALISE = false,
@@ -121,7 +125,8 @@ local function new(param: {
 
 	if param.Config then
 		for key, value in TableUtil.DeepClone(FALLBACK_CONFIG) do
-			normalised_config[key] = param.Config and param.Config[key] or value
+			local override = param.Config[key]
+			normalised_config[key] = if override ~= nil then override else value
 		end
 	else
 		normalised_config = TableUtil.DeepClone(FALLBACK_CONFIG)
@@ -156,6 +161,10 @@ local function new(param: {
 	self.Waypoints = {} :: typeof(self.Path:GetWaypoints())
 	self.TargetPosition = self:GetCurrentPosition()
 	self.LastPathComputeTime = 0
+	self.LastAdvanceTime = os.clock()
+	self.LastMovingTime = os.clock()
+	self.LastRecordedPosition = self.TargetPosition
+	self.PendingRecalculate = false
 	self.CurrentWaypointIndex = 1
 	self.ChaseTarget = nil :: (BasePart | Model)?
 	self.LastChasePosition = nil :: Vector3?
@@ -166,6 +175,23 @@ local function new(param: {
 	self.VisualisationNodes = {}
 	self.StaleVisualisationNodes = {}
 	self.VisitedNodePositions = {}
+
+	if RunService:IsServer() then
+		local root = self:GetRoot()
+		if root and root:IsA("BasePart") and not root.Anchored then
+			pcall(root.SetNetworkOwner, root, nil)
+		end
+
+		for _, part in self.Entity:GetDescendants() do
+			if part:IsA("BasePart") and not part.Anchored then
+				pcall(part.SetNetworkOwner, part, nil)
+			end
+		end
+
+		if self.Entity:IsA("BasePart") and not self.Entity.Anchored then
+			pcall(self.Entity.SetNetworkOwner, self.Entity, nil)
+		end
+	end
 	--
 
 	if self.Config.VISUALISE then
@@ -233,7 +259,7 @@ end
 
 function Pathfind.GetRoot(self: Pathfind)
 	if self.IsModel then
-		return self.Entity.PrimaryPart
+		return self.Entity.PrimaryPart or self.Entity:FindFirstChild("HumanoidRootPart")
 	else
 		return self.Entity
 	end
@@ -275,6 +301,9 @@ function Pathfind._ExecuteWaypoint(self: Pathfind)
 	--
 
 	--
+	self.LastAdvanceTime = os.clock()
+	self.LastMovingTime = os.clock()
+	self.LastRecordedPosition = self:GetCurrentPosition()
 	self.Mover(waypoint.Position)
 	self.CurrentWaypointIndex += 1
 	--
@@ -298,7 +327,7 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 		--
 
 		-- We only need to recalculate if the blocked waypoint is ahead of us
-		if blocked_waypoint_index < self.CurrentWaypointIndex then
+		if blocked_waypoint_index < self.CurrentWaypointIndex - 1 then
 			return
 		end
 		--
@@ -310,6 +339,12 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 
 	self.Keeper:Connect(RunService.Heartbeat, function()
 		--
+		if self.PendingRecalculate then
+			self:RecalculatePath()
+		end
+		--
+
+		--
 		if not self.IsMoving then
 			return
 		end
@@ -320,6 +355,7 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 		local waypoint = self.Waypoints[self.CurrentWaypointIndex - 1]
 
 		if not waypoint then
+			self:_ExecuteWaypoint()
 			return
 		end
 		--
@@ -327,9 +363,12 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 		--
 		local diff = waypoint.Position - current_position
 		local dist = Vector3.new(diff.X, 0, diff.Z).Magnitude
+		local is_final_waypoint = (self.Waypoints[self.CurrentWaypointIndex] == nil)
+		local arrival_threshold = if is_final_waypoint
+			then self.Config.WAYPOINT_ARRIVAL_RADIUS
+			else math.min(self.Config.WAYPOINT_ADVANCE_RADIUS or 2.8, self.Config.WAYPOINT_SPACING * 0.75)
 
-		if dist < math.max(self.Config.AGENT_RADIUS, 3) then
-			self.LastAdvanceTime = os.clock()
+		if dist < arrival_threshold and math.abs(diff.Y) <= self.Config.AGENT_HEIGHT then
 			self:_ExecuteWaypoint()
 			return
 		end
@@ -337,28 +376,46 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 
 		--
 		local root_part = self:GetRoot()
+		local velocity = root_part and root_part.AssemblyLinearVelocity or Vector3.zero
+		local vel_normalised = Vector3.new(velocity.X, 0, velocity.Z)
+		local speed = vel_normalised.Magnitude
+		local dist_moved = (current_position - (self.LastRecordedPosition or current_position)).Magnitude
+
+		if speed > 1 or dist_moved > 0.1 then
+			self.LastMovingTime = os.clock()
+			self.LastRecordedPosition = current_position
+		end
+
+		local stuck_timeout = self.Config.STUCK_TIMEOUT or self.Config.STALL_TIMEOUT or 2
+
+		-- Stuck fallback: recompute path if the agent stops moving for stuck_timeout seconds
+		if os.clock() - self.LastMovingTime > stuck_timeout then
+			self.LastMovingTime = os.clock()
+			self.LastAdvanceTime = os.clock()
+			self.LastRecordedPosition = current_position
+			self:RecalculatePath()
+			return
+		end
+		--
 
 		if not root_part or diff.Magnitude <= 0 then
 			return
 		end
 		--
 
-		--
-		local velocity = root_part.AssemblyLinearVelocity
-		local vel_normalised = Vector3.new(velocity.X, 0, velocity.Z)
-
 		if vel_normalised.Magnitude <= 1 then
 			return
 		end
 		--
 
-		-- If dot product is < 0, the dummy is moving AWAY from the waypoint (overshot)
-		local dirc_to_wp = Vector3.new(diff.X, 0, diff.Z).Unit
-		local move_dirc = vel_normalised.Unit
+		-- If dot product is < 0 and we are in the vicinity of the waypoint, the dummy has passed the waypoint (overshot)
+		if dist <= arrival_threshold * 1.5 and math.abs(diff.Y) <= self.Config.AGENT_HEIGHT then
+			local dirc_to_wp = Vector3.new(diff.X, 0, diff.Z).Unit
+			local move_dirc = vel_normalised.Unit
 
-		if dirc_to_wp:Dot(move_dirc) < 0 then
-			self.LastAdvanceTime = os.clock()
-			self:_ExecuteWaypoint()
+			if dirc_to_wp:Dot(move_dirc) < 0 then
+				self:_ExecuteWaypoint()
+			end
 		end
 		--
 	end, PathLogiCleanupKey)
@@ -369,29 +426,16 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 				return
 			end
 
-			if not reached then
-				-- If we manually advanced the waypoint recently, this is just a MoveTo cancellation
-				if os.clock() - (self.LastAdvanceTime or 0) < 0.1 then
-					return
-				end
-				self:RecalculatePath()
-			else
+			if reached then
 				-- Reached the node physically, ensure we advance
-				self.LastAdvanceTime = os.clock()
 				self:_ExecuteWaypoint()
 			end
 		end, PathLogiCleanupKey)
 	end
 
 	self.OnPathCalculated:Connect(function(waypoints)
-		local wasMoving = self.IsMoving
 		self.IsMoving = true
-
-		if not wasMoving then
-			-- Fresh path start — kick off the first MoveTo
-			self:_ExecuteWaypoint()
-		end
-		-- If already moving, the Heartbeat loop will seamlessly pick up the new waypoints
+		self:_ExecuteWaypoint()
 	end, PathLogiCleanupKey)
 
 	self.OnPathEnded:Connect(function()
@@ -508,12 +552,20 @@ end
 
 function Pathfind.RecalculatePath(self: Pathfind)
 	--
+	if self.Destroyed then
+		return
+	end
+	--
+
+	--
 	local clock = os.clock()
 
 	if clock - self.LastPathComputeTime < self.Config.RECALCULATE_THROTTLE then
+		self.PendingRecalculate = true
 		return
 	end
 
+	self.PendingRecalculate = false
 	self.LastPathComputeTime = clock
 	--
 
@@ -536,10 +588,13 @@ function Pathfind.RecalculatePath(self: Pathfind)
 
 		self.Waypoints = result.Waypoints
 		self.CurrentWaypointIndex = 1
+		self.LastAdvanceTime = os.clock()
+		self.LastMovingTime = os.clock()
+		self.LastRecordedPosition = current_pos
 
 		-- Skip any nodes the agent has already moved past during the async yield
 		local current_pos = self:GetCurrentPosition()
-		local threshold = math.max(self.Config.AGENT_RADIUS, 3)
+		local threshold = math.max(self.Config.WAYPOINT_ARRIVAL_RADIUS, self.Config.AGENT_RADIUS)
 
 		while self.CurrentWaypointIndex < #self.Waypoints do
 			local wp = self.Waypoints[self.CurrentWaypointIndex]
@@ -628,6 +683,7 @@ function Pathfind.Chase(self: Pathfind, target: BasePart | Model, stopping_dista
 			self.IsMoving = false
 			self.Waypoints = {}
 			self.CurrentWaypointIndex = 1
+			self.PendingRecalculate = false
 			self.PathComputeToken = (self.PathComputeToken or 0) + 1
 
 			self.Mover(current_position)
@@ -666,6 +722,10 @@ function Pathfind.Stop(self: Pathfind)
 	self.IsMoving = false
 	self.Waypoints = {}
 	self.CurrentWaypointIndex = 1
+	self.PendingRecalculate = false
+	self.LastAdvanceTime = os.clock()
+	self.LastMovingTime = os.clock()
+	self.LastRecordedPosition = self:GetCurrentPosition()
 	self.PathComputeToken = (self.PathComputeToken or 0) + 1
 	--
 
@@ -683,8 +743,9 @@ function Pathfind.Stop(self: Pathfind)
 end
 
 function Pathfind.Destroy(self: Pathfind)
-	self.Keeper:Destroy()
 	self.Destroyed = true
+	self.PendingRecalculate = false
+	self.Keeper:Destroy()
 end
 
 PathfindModule.new = new
