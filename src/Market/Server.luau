@@ -10,7 +10,7 @@ const MarketplaceService = game:GetService("MarketplaceService")
 const Players = game:GetService("Players")
 const RunService = game:GetService("RunService")
 
-local Signal = require("../Signal")
+const Signal = require("../Signal")
 const Queue = require("../Queue")
 const Promise = require("../../../../Promise")
 
@@ -184,8 +184,7 @@ local function apply_definition(player, definition, context)
 		return nil, false, "MissingHandler"
 	end
 
-	-- Snapshot the player's state before granting. Producer actions are immutable
-	-- (each clones), so this reference stays a valid pre-grant snapshot for rollback.
+	--
 	local state_snapshot = state
 
 	local ok, result, reason = pcall(handler, player, definition, context)
@@ -203,8 +202,7 @@ local function apply_definition(player, definition, context)
 
 	local save_ok, save_error = DataServer:SavePlayer(player):await()
 	if not save_ok then
-		-- Roll back the in-memory grant and receipt so the receipt's idempotency check
-		-- does not block (and silently drop) Roblox's retry of this purchase.
+		--
 		if state_snapshot then
 			Market.Producer._LoadPlayer(tostring(player.UserId), state_snapshot)
 		end
@@ -541,8 +539,8 @@ function Market:Start()
 	end
 
 	local players = Players:GetPlayers()
-	for i = 1, #players do
-		cache_player_gamepasses(players[i])
+	for _, player in players do
+		cache_player_gamepasses(player)
 	end
 
 	Players.PlayerAdded:Connect(cache_player_gamepasses)

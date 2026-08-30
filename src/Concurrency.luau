@@ -80,7 +80,7 @@ end
 
 KeyedDebounce.new = new_keyed_debounce
 
--- Export classes
+--
 Concurrency.AsyncLock = AsyncLock
 Concurrency.KeyedDebounce = KeyedDebounce
 

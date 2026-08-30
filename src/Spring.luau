@@ -118,7 +118,7 @@ do
 	LinearSpring.__index = LinearSpring
 
 	function LinearSpring.new<T>(dampingRatio: number, frequency: number, pos: T, rawGoal: T, typedat)
-		local linearPos = typedat.toIntermediate(pos)
+		local linearPos = typedat.toIntermediate(pos) :: {number}
 		return setmetatable(
 			{
 				d = dampingRatio,

@@ -10,7 +10,7 @@ const RunService = game:GetService("RunService")
 const Players = game:GetService("Players")
 
 const Config = require(".././Config")
-local Signal = require("../Signal")
+const Signal = require("../Signal")
 
 export type PlayerState = Config.PlayerState
 

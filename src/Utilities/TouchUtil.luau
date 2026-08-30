@@ -89,11 +89,7 @@ export type ButtonOptions = {
 	MaxSize: number?,
 }
 
---[[
-	Size is stored as a multiplier over the button's own base rather than in pixels. Craftsman's
-	buttons are authored against BASE_SIZE; an adopted CoreGui button's base is whatever Roblox
-	rendered it at, which differs per device. A multiplier means the same thing for both.
-]]
+--
 export type LayoutEntry = {
 	Position: { X: number, Y: number }?,
 	Scale: number?,
@@ -218,14 +214,6 @@ local TouchButton = {}
 TouchButton.__index = TouchButton
 
 --
---[[
-	One input object belongs to one button until it is released.
-
-	GuiObject.InputBegan fires when an input *enters* the region, not only when it starts there,
-	so without this a finger already dragging one button claims every button it passes over -- and
-	outside edit mode, sliding across the pad fires every action it crosses. A second finger is a
-	distinct InputObject and is unaffected, so multitouch still works.
-]]
 local function claim_input(self: any, input_object: any): boolean
 	if input_object == nil then
 		return true
@@ -397,12 +385,7 @@ local function apply_size(self: any, size: number): number
 	return clamped
 end
 
---[[
-	An adopted button is positioned inside whatever already owns it -- the CoreGui
-	TouchControlFrame, for the jump button -- so every measurement is taken against that container
-	rather than this layer's ScreenGui. Reparenting it here would move it out of TouchGui and take
-	its behaviour with it.
-]]
+--
 local function viewport_size(): Vector2
 	local camera = workspace.CurrentCamera
 
@@ -417,12 +400,7 @@ local function absolute_centre(instance: any): Vector2
 	return instance.AbsolutePosition + instance.AbsoluteSize / 2
 end
 
---[[
-	Positions an instance by its centre in screen pixels, whatever container it happens to sit in.
-	The edit proxy lives in this layer's ScreenGui and the real jump button lives in CoreGui's
-	TouchControlFrame; the two have different insets, so a scale position copied straight across
-	would land in the wrong place.
-]]
+--
 local function apply_absolute_centre(instance: any, centre: Vector2)
 	local parent = instance.Parent
 
@@ -518,20 +496,13 @@ end
 
 local function apply_resize(drag: any, delta: Vector2)
 	local self = drag.button
-	--[[
-		The handle sits at the bottom-left, so the button grows as the handle is dragged left and
-		down -- X is inverted against the drag delta, Y is not.
-	]]
+	--
 	local factor = get_scale_factor()
 	local growth = (-delta.X + delta.Y) / 2 / (if factor > 0 then factor else 1)
 
 	apply_size(self, drag.origin_size + growth)
 
-	--[[
-		Resizing has to re-clamp, or growing a button near an edge pushes it off screen. Read the
-		live centre when there is no stored one: a button that has been resized but never dragged
-		has no _LayoutPosition yet, and an adopted button never has one until its first move.
-	]]
+	--
 	if self.Zone then
 		return
 	end
@@ -588,11 +559,7 @@ local function end_drag(input_object: any)
 	return drag
 end
 
---[[
-	A touch InputObject reports its own Change events, so a drag can be keyed on identity. A mouse
-	does not: the press arrives as MouseButton1 and the movement as a separate MouseMovement
-	object, so identity matching silently never fires and the button neither drags nor acts.
-]]
+--
 local function find_drag(input_object: any): any
 	local drag = Drags[input_object]
 
@@ -654,11 +621,6 @@ end
 --
 
 --
---[[
-	Dragging the real jump button would otherwise jump, and dragging anything would otherwise pan
-	the camera, so edit mode turns the default control module off for its duration. This is also
-	what a player expects: the character should hold still while its controls are rearranged.
-]]
 local function set_default_controls(enabled: boolean)
 	local scripts = Players.LocalPlayer:FindFirstChild("PlayerScripts")
 
@@ -718,13 +680,7 @@ local function find_default_jump(): ImageButton?
 	return nil
 end
 
---[[
-	Buttons default to the size of Roblox's jump button rather than a constant, so a pad that sits
-	beside it reads as one set of controls. Measured in device pixels and divided back through this
-	layer's own UIScale, since button sizes are authored in reference pixels. Only a real
-	measurement is cached; a zero AbsoluteSize before the first render falls through to the config
-	default without being remembered.
-]]
+--
 local function resolve_default_size(): number
 	if DefaultSize then
 		return DefaultSize
@@ -750,18 +706,7 @@ local function resolve_default_size(): number
 	return measured
 end
 
---[[
-	A zone is an origin and a slot index, not a live layout.
-
-	Zones used to be frames running a UIListLayout, which meant dragging one button out made every
-	other button in the row slide over to close the gap -- the player moved one control and the
-	rest moved themselves. A slot is now derived from the button's Order alone, so it depends on
-	nothing that can change: hiding, resizing, dragging or destroying a neighbour leaves every
-	other button exactly where the player last saw it.
-
-	The cost is that a removed button leaves a hole rather than the row closing up. That is the
-	intended trade -- muscle memory beats tidiness on a control pad.
-]]
+--
 local function place_in_zone(self: any, zone: Zone)
 	local layout = ZONE_LAYOUTS[zone]
 	local margin = TouchConfig.ZONE_MARGIN
@@ -827,13 +772,7 @@ local function get_root(): ScreenGui
 	Root = screen_gui
 	RootKeeper:Add(screen_gui)
 
-	--[[
-		Off by default. This pad sits beside Roblox's touch controls, which carry no UIScale and
-		are already sized per device, so scaling it too fights them -- and InterfaceUtil's MIN_SCALE
-		clamp renders the whole layer at half size on a phone viewport. Every size here is in
-		device pixels, matching the CoreGui controls. Opt in only if the pad is meant to scale with
-		the rest of your UI rather than with the controls.
-	]]
+	--
 	if TouchConfig.AUTO_SCALE then
 		RootKeeper:Add(InterfaceUtil:AutoScale(screen_gui))
 		RootScale = screen_gui:FindFirstChildOfClass("UIScale")
@@ -945,8 +884,8 @@ local function new(action_name: string, options: ButtonOptions?)
 
 	if given.ShowOn then
 		local allowed = {}
-		for i = 1, #given.ShowOn do
-			allowed[given.ShowOn[i]] = true
+		for _, device in given.ShowOn do
+			allowed[device] = true
 		end
 		self._ShowOn = allowed
 	end
@@ -1140,12 +1079,7 @@ function TouchButton._Resolve(self: TouchButton)
 	end
 end
 
---[[
-	Edit mode disables the default control module, and that takes the whole TouchGui with it -- so
-	the real jump button is not on screen to be dragged. Editing therefore happens on a clone that
-	lives in this layer: it cannot trigger a jump, and nothing else can switch it off. On the way
-	out the clone's final rect is handed back to the real button and the clone is discarded.
-]]
+--
 function TouchButton._BeginProxy(self: TouchButton)
 	if self._Proxy or not self.IsAdopted then
 		return
@@ -1176,11 +1110,7 @@ function TouchButton._BeginProxy(self: TouchButton)
 
 	apply_absolute_centre(proxy, centre)
 
-	--[[
-		The constructor's InputBegan is bound to the real instance, which is off screen for the
-		duration of edit mode -- so without this the proxy could be resized (its handle is a child
-		of the proxy) but never dragged.
-	]]
+	--
 	self._ProxyKeeper:Connect(proxy.InputBegan, function(input_object: InputObject)
 		begin_edit_drag(self, input_object)
 	end)
@@ -1588,8 +1518,8 @@ end
 function TouchButton.SetShowOn(self: TouchButton, devices: { InputUtil.DeviceType }): TouchButton
 	local allowed = {}
 
-	for i = 1, #devices do
-		allowed[devices[i]] = true
+	for _, device in devices do
+		allowed[device] = true
 	end
 
 	self._ShowOn = allowed

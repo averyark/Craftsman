@@ -196,8 +196,7 @@ function SoundUtil.QuickPlay(param: {
 
 	apply_properties(sound, param.Properties)
 
-	-- QuickPlay is fire-and-forget and self-destroys on Ended, which never fires for a looped
-	-- sound. Force non-looped so the sound (and any host part) cannot leak.
+	--
 	if sound.Looped then
 		PrintUtil:Warn("SoundUtil.QuickPlay does not support looped sounds; forcing Looped = false.")
 		sound.Looped = false
@@ -253,8 +252,7 @@ function SoundUtil.Register(
 	apply_properties(sound, properties)
 	--
 
-	-- Destroy any previously registered Sound under this name; it is parented to SoundService
-	-- and would otherwise leak as an orphan on re-registration.
+	--
 	local existing = GlobalSoundRegistry[sound_name]
 	if existing then
 		existing:Destroy()
@@ -437,10 +435,10 @@ function SoundPlayer.Play(
 		sound = sound:Clone()
 		sound.Parent = self.Container
 
-		-- Apply per-play property overrides to the clone only, not the cached template
+		--
 		apply_properties(sound, param)
 
-		-- Force non-looped so the clone doesn't leak; Ended never fires for looped sounds
+		--
 		sound.Looped = false
 
 		sound.Ended:Once(function()

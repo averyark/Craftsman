@@ -118,11 +118,13 @@ local function resolve_tag_objects(check_tags: TagInput): TagList
 
 	local first_value = tag_list[1]
 	if type(first_value) == "string" then
-		for index = 1, #tag_list do
-			local tag = Tags[tag_list[index]]
-			if tag then
-				tag_objects[#tag_objects + 1] = tag
+		for _, tag_id in tag_list do
+			local tag = Tags[tag_id]
+			if not tag then
+				continue
 			end
+
+			tag_objects[#tag_objects + 1] = tag
 		end
 		return tag_objects
 	end
@@ -332,8 +334,7 @@ function TagClass.GetTagId(self: Tag, instance: Instance, tag_object: NumberValu
 		return nil
 	end
 
-	-- The id is stamped onto the value object at creation (see create_tag_value), so this is an
-	-- O(1) lookup. Validate it still maps to the same object before trusting it.
+	--
 	local id = tag_object:GetAttribute("TagId")
 	if type(id) == "string" and self.Tagged[id] == tag_object then
 		return id
@@ -409,8 +410,8 @@ function TagClass.RemoveAll(self: Tag, instance: Instance, check_func: ((tag_obj
 		tag_ids[#tag_ids + 1] = id
 	end
 
-	for index = 1, #tag_ids do
-		self:Remove(instance, tag_ids[index])
+	for _, tag_id in tag_ids do
+		self:Remove(instance, tag_id)
 	end
 end
 
@@ -629,8 +630,8 @@ end
 function TagClass.ListenToInstanceTags(self: Tag, instance: Instance, callback: (NumberValue, boolean) -> ())
 	local current_tags = self:GetTags(instance)
 
-	for index = 1, #current_tags do
-		callback(current_tags[index], true)
+	for _, current_tag in current_tags do
+		callback(current_tag, true)
 	end
 
 	local alive = true
@@ -710,8 +711,8 @@ function TagClass.Destroy(self: Tag)
 		tag_ids[#tag_ids + 1] = id
 	end
 
-	for index = 1, #tag_ids do
-		self:Remove(nil, tag_ids[index])
+	for _, tag_id in tag_ids do
+		self:Remove(nil, tag_id)
 	end
 
 	Tags[self.Identifier] = nil
@@ -762,10 +763,12 @@ end
 function TagModule.HasTags(instance: Instance, check_tags: TagInput): boolean
 	local tag_objects = resolve_tag_objects(check_tags)
 
-	for index = 1, #tag_objects do
-		if tag_objects[index]:IsTagged(instance) then
-			return true
+	for _, tag_object in tag_objects do
+		if not tag_object:IsTagged(instance) then
+			continue
 		end
+
+		return true
 	end
 
 	return false

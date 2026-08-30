@@ -48,7 +48,7 @@ local function new(func: (...any) -> ...any, wait: number, options: DebounceOpti
 	self._LastResult = nil
 	self._LastResultCount = 0
 
-	-- Bind Call to support direct event connections without losing 'self' context
+	--
 	self.Call = function(...: any): ...any
 		local arg_count = select("#", ...)
 		if arg_count > 0 and select(1, ...) == self then

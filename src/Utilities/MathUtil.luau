@@ -21,6 +21,17 @@ const TEENS =
 const TENS = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" }
 const SCALES = { "", "thousand", "million", "billion", "trillion", "quadrillion", "quintillion" }
 
+--
+local function pad_two(value: number): string
+	local text = tostring(value)
+	if #text >= 2 then
+		return text
+	end
+
+	return `0{text}`
+end
+--
+
 --[=[
 	Maps a value from one range to another range.
 	@param value number -- The value to map.
@@ -88,9 +99,7 @@ function MathUtil.Abbreviate(value)
 
 	local index = math.floor(math.log10(value) / 3)
 	local divisor = 10 ^ (index * 3)
-	local formatted_number = string.format("%.1f", value / divisor)
-
-	formatted_number = formatted_number:gsub("%.0$", "")
+	local formatted_number = tostring(math.floor((value / divisor) * 10 + 0.5) / 10)
 
 	return formatted_number .. SUFFIXES[index]
 end
@@ -212,7 +221,7 @@ function MathUtil.FormatTime(total_seconds)
 	local minutes = math.floor(total_seconds / 60)
 	local seconds = math.floor(total_seconds % 60)
 
-	return string.format("%02d:%02d", minutes, seconds)
+	return `{pad_two(minutes)}:{pad_two(seconds)}`
 end
 
 --[=[

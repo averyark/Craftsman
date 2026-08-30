@@ -86,18 +86,9 @@ local Config = {
 	MODULE_LOAD_ORDER = {},
 }
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+const ReplicatedStorage = game:GetService("ReplicatedStorage")
 
---[[
-	The consumer's state type, read from its GreenTea schema. Defining DATA.SCHEMA is the
-	supported way to type player data: it is what gives Data and Market their real
-	PlayerState instead of `any`.
-
-	This is a *type-only* reach-through. `typeof(...)` is erased, so despite naming a module
-	in the consumer's ReplicatedStorage it executes no require and does not stop Craftsman
-	loading in a place that has no CraftsmanConfig -- which the runtime require below it used
-	to do. A place without that module still runs; it just does not typecheck this line.
-]]
+--
 export type PlayerState = typeof(require(ReplicatedStorage.CraftsmanConfig).DATA.SCHEMA:type())
 
 export type ConfigEditType = {
@@ -251,13 +242,7 @@ export type ConfigModule = {
 
 local DEFAULTS = TableUtil.DeepClone(Config)
 
---[[
-	Copies `source` over `target` without replacing any table it can merge into instead.
-
-	Identity matters here: modules capture `Config` and its sub-tables when they require
-	this module (`const StateMachineConfig = Config.STATE_MACHINE`). Assigning a fresh
-	sub-table would leave every one of those holding a stale reference, so merge in place.
-]]
+--
 local function assign_in_place(target: { [any]: any }, source: { [any]: any })
 	for key, value in source do
 		local existing = target[key]
@@ -288,18 +273,14 @@ end
 	@param edit ConfigEditType -- The configuration to apply. Omitted fields keep their default.
 ]=]
 --
---[[
-	DATA.SCHEMA is how player data gets typed: PlayerState reads it, and Data and Market
-	are typed off PlayerState. Without one it silently degrades to `any` -- silently
-	because it fails in a type position under --!nonstrict, which is exactly how it went
-	unnoticed. Only worth saying when DATA is actually on.
-]]
 local function warn_if_schema_missing()
-	if Config.DATA.ENABLED and Config.DATA.SCHEMA == nil then
-		PrintUtil:Warn(
-			"DATA.ENABLED is true but DATA.SCHEMA is not set. Define a GreenTea schema so Data and Market can type PlayerState; without one it degrades to any."
-		)
+	if not Config.DATA.ENABLED or Config.DATA.SCHEMA ~= nil then
+		return
 	end
+
+	PrintUtil:Warn(
+		"DATA.ENABLED is true but DATA.SCHEMA is not set. Define a GreenTea schema so Data and Market can type PlayerState; without one it degrades to any."
+	)
 end
 
 function Config.Configure(edit: ConfigEditType)
@@ -307,14 +288,7 @@ function Config.Configure(edit: ConfigEditType)
 	warn_if_schema_missing()
 end
 
---[[
-	Craftsman used to hard-require ReplicatedStorage.CraftsmanConfig at module scope, so it
-	could not load at all in a place that did not define that exact module at that exact
-	path -- no defaults, no minimal consumer, no headless test.
-
-	It is now optional: picked up when present, defaults when not. Existing consumers are
-	unaffected, and Configure is available for anyone who would rather be explicit.
-]]
+--
 local consumer_config = ReplicatedStorage:FindFirstChild("CraftsmanConfig")
 if consumer_config then
 	Config.Configure(require(consumer_config))

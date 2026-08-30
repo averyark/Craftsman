@@ -19,9 +19,7 @@ EntityModule.Entities = {}
 local Entity = {}
 Entity.__index = Entity
 
--- How long the constructor waits for a rig's Humanoid/HumanoidRootPart before giving up.
--- Unbounded WaitForChild means a rig that never gets one hangs Entity.new forever, with
--- no error and no way for the caller to recover.
+--
 local RIG_WAIT_TIMEOUT = 5
 
 EntityModule.Spawned = Signal.new()
@@ -42,8 +40,7 @@ local function new(entity: Instance, player: Player?)
 	self.Humanoid = entity:WaitForChild("Humanoid", RIG_WAIT_TIMEOUT)
 	self.HumanoidRootPart = entity:WaitForChild("HumanoidRootPart", RIG_WAIT_TIMEOUT)
 
-	-- A rig missing either part used to hang here forever. Failing loudly is recoverable:
-	-- the caller can pcall it, and the message names the offending rig.
+	--
 	if not self.Humanoid then
 		PrintUtil:Error(`Entity.new: {entity:GetFullName()} has no Humanoid after {RIG_WAIT_TIMEOUT}s.`, 2)
 	end

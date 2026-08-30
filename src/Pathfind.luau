@@ -17,8 +17,8 @@ const TableUtil = require("./Utilities/TableUtil")
 
 --
 const FALLBACK_CONFIG = {
-	RECALCULATE_THROTTLE = 0.2, -- seconds
-	RECALCULATE_DISTANCE_THRESHOLD = 4, -- studs
+	RECALCULATE_THROTTLE = 0.2,
+	RECALCULATE_DISTANCE_THRESHOLD = 4,
 
 	AGENT_RADIUS = 2,
 	AGENT_HEIGHT = 5,
@@ -29,8 +29,8 @@ const FALLBACK_CONFIG = {
 	WAYPOINT_SPACING = 4,
 	WAYPOINT_ARRIVAL_RADIUS = 1.5,
 	WAYPOINT_ADVANCE_RADIUS = 2.8,
-	STUCK_TIMEOUT = 2, -- seconds stationary before recomputing path
-	STALL_TIMEOUT = 2, -- legacy alias for STUCK_TIMEOUT
+	STUCK_TIMEOUT = 2,
+	STALL_TIMEOUT = 2,
 	PARTIAL_PATH = true,
 
 	VISUALISE = false,
@@ -156,7 +156,6 @@ local function new(param: {
 	--
 
 	--
-	--
 	self.IsModel = self.Entity:IsA("Model")
 	self.Waypoints = {} :: typeof(self.Path:GetWaypoints())
 	self.TargetPosition = self:GetCurrentPosition()
@@ -204,15 +203,15 @@ local function new(param: {
 
 		--
 		self.Keeper:Connect(RunService.Heartbeat, function()
-			self.EntityVisualisationLabel.Text = string.format(
-				"ChaseTarget: %s\nCurrentWayPointIndex: %d\nTargetPosition: %s\nIsMoving: %s",
-				self.ChaseTarget and self.ChaseTarget.Name or "None",
-				self.CurrentWaypointIndex,
-				`{tostring(math.round(self.TargetPosition.X * 100) / 100)}, {tostring(
-					math.round(self.TargetPosition.Y * 100) / 100
-				)}, {tostring(math.round(self.TargetPosition.Z * 100) / 100)}`,
-				tostring(self.IsMoving)
-			)
+			local target_name = self.ChaseTarget and self.ChaseTarget.Name or "None"
+			local target_x = math.round(self.TargetPosition.X * 100) / 100
+			local target_y = math.round(self.TargetPosition.Y * 100) / 100
+			local target_z = math.round(self.TargetPosition.Z * 100) / 100
+
+			self.EntityVisualisationLabel.Text = `ChaseTarget: {target_name}\n`
+				.. `CurrentWayPointIndex: {self.CurrentWaypointIndex}\n`
+				.. `TargetPosition: {target_x}, {target_y}, {target_z}\n`
+				.. `IsMoving: {self.IsMoving}`
 		end, "VisualisationLogic")
 		--
 	end
@@ -258,33 +257,41 @@ function Pathfind._ClearVisualisationNodes(self: Pathfind)
 end
 
 function Pathfind.GetRoot(self: Pathfind)
-	if self.IsModel then
-		return self.Entity.PrimaryPart or self.Entity:FindFirstChild("HumanoidRootPart")
-	else
+	if not self.IsModel then
 		return self.Entity
 	end
+
+	return self.Entity.PrimaryPart or self.Entity:FindFirstChild("HumanoidRootPart")
 end
 
 function Pathfind.GetCurrentPosition(self: Pathfind)
-	if self.IsModel then
-		return self.Entity.PrimaryPart and self.Entity.PrimaryPart.CFrame.Position or self.Entity:GetPivot().Position
-	else
+	if not self.IsModel then
 		return self.Entity.Position
 	end
+
+	return self.Entity.PrimaryPart and self.Entity.PrimaryPart.CFrame.Position or self.Entity:GetPivot().Position
 end
 
+--
+local function position_key(position: Vector3): string
+	local x = math.round(position.X * 10) / 10
+	local y = math.round(position.Y * 10) / 10
+	local z = math.round(position.Z * 10) / 10
+
+	return `{x},{y},{z}`
+end
+--
+
 function Pathfind._ExecuteWaypoint(self: Pathfind)
-	-- Mark the waypoint we just reached as visited (the one we were moving toward)
+	--
 	if self.Config.VISUALISE then
-		local justReached = self.Waypoints[self.CurrentWaypointIndex - 1]
-		if justReached then
-			local k =
-				string.format("%.1f,%.1f,%.1f", justReached.Position.X, justReached.Position.Y, justReached.Position.Z)
-			self.VisitedNodePositions[k] = true
+		local just_reached = self.Waypoints[self.CurrentWaypointIndex - 1]
+		if just_reached then
+			self.VisitedNodePositions[position_key(just_reached.Position)] = true
 		end
 	end
 
-	-- Check next waypoint
+	--
 	local waypoint = self.Waypoints[self.CurrentWaypointIndex]
 
 	if not waypoint then
@@ -294,7 +301,7 @@ function Pathfind._ExecuteWaypoint(self: Pathfind)
 	end
 	--
 
-	-- We only execute jump when the agent CanJump is valid, and the path requires jump, while also having a humanoid
+	--
 	if waypoint.Action == Enum.PathWaypointAction.Jump and self.Humanoid then
 		self.Humanoid.Jump = true
 	end
@@ -315,7 +322,7 @@ end
 local PathLogiCleanupKey = "PathLogic"
 
 function Pathfind.ConnectPathLogic(self: Pathfind)
-	-- Remove previous connections if they exist
+	--
 	self.Keeper:Remove(PathLogiCleanupKey)
 	--
 
@@ -326,13 +333,13 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 		end
 		--
 
-		-- We only need to recalculate if the blocked waypoint is ahead of us
+		--
 		if blocked_waypoint_index < self.CurrentWaypointIndex - 1 then
 			return
 		end
 		--
 
-		-- Coloring is handled in RecalculatePath based on visited history
+		--
 
 		self:RecalculatePath()
 	end, PathLogiCleanupKey)
@@ -388,7 +395,7 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 
 		local stuck_timeout = self.Config.STUCK_TIMEOUT or self.Config.STALL_TIMEOUT or 2
 
-		-- Stuck fallback: recompute path if the agent stops moving for stuck_timeout seconds
+		--
 		if os.clock() - self.LastMovingTime > stuck_timeout then
 			self.LastMovingTime = os.clock()
 			self.LastAdvanceTime = os.clock()
@@ -408,7 +415,7 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 		end
 		--
 
-		-- If dot product is < 0 and we are in the vicinity of the waypoint, the dummy has passed the waypoint (overshot)
+		--
 		if dist <= arrival_threshold * 1.5 and math.abs(diff.Y) <= self.Config.AGENT_HEIGHT then
 			local dirc_to_wp = Vector3.new(diff.X, 0, diff.Z).Unit
 			local move_dirc = vel_normalised.Unit
@@ -427,7 +434,7 @@ function Pathfind.ConnectPathLogic(self: Pathfind)
 			end
 
 			if reached then
-				-- Reached the node physically, ensure we advance
+				--
 				self:_ExecuteWaypoint()
 			end
 		end, PathLogiCleanupKey)
@@ -445,7 +452,7 @@ end
 --
 
 function Pathfind.ComputePathToAsync(self: Pathfind, target_position: Vector3)
-	-- Async returns a Promise
+	--
 	return Promise.new(function(resolve)
 		local current_position = self:GetCurrentPosition()
 
@@ -466,8 +473,7 @@ function Pathfind._UpdateVisualisation(self: Pathfind)
 	local new_nodes = {}
 
 	local function was_visited(node: Part): boolean
-		local k = string.format("%.1f,%.1f,%.1f", node.Position.X, node.Position.Y, node.Position.Z)
-		return self.VisitedNodePositions[k] == true
+		return self.VisitedNodePositions[position_key(node.Position)] == true
 	end
 
 	local function apply_blocked_color(node: Part)
@@ -570,11 +576,11 @@ function Pathfind.RecalculatePath(self: Pathfind)
 	--
 
 	self.PathComputeToken = (self.PathComputeToken or 0) + 1
-	local currentToken = self.PathComputeToken
+	local current_token = self.PathComputeToken
 
 	--
 	self:ComputePathToAsync(self.TargetPosition):andThen(function(result)
-		if self.Destroyed or self.PathComputeToken ~= currentToken then
+		if self.Destroyed or self.PathComputeToken ~= current_token then
 			return
 		end
 
@@ -586,22 +592,27 @@ function Pathfind.RecalculatePath(self: Pathfind)
 			return
 		end
 
+		local current_pos = self:GetCurrentPosition()
+		local threshold = math.max(self.Config.WAYPOINT_ARRIVAL_RADIUS, self.Config.AGENT_RADIUS)
+
 		self.Waypoints = result.Waypoints
 		self.CurrentWaypointIndex = 1
 		self.LastAdvanceTime = os.clock()
 		self.LastMovingTime = os.clock()
 		self.LastRecordedPosition = current_pos
 
-		-- Skip any nodes the agent has already moved past during the async yield
-		local current_pos = self:GetCurrentPosition()
-		local threshold = math.max(self.Config.WAYPOINT_ARRIVAL_RADIUS, self.Config.AGENT_RADIUS)
+		--
 
 		while self.CurrentWaypointIndex < #self.Waypoints do
+			--
 			local wp = self.Waypoints[self.CurrentWaypointIndex]
+
 			local dist = Vector3.new(wp.Position.X - current_pos.X, 0, wp.Position.Z - current_pos.Z).Magnitude
 			if dist > threshold then
 				break
 			end
+			--
+
 			self.CurrentWaypointIndex += 1
 		end
 		--
@@ -635,7 +646,7 @@ function Pathfind.Chase(self: Pathfind, target: BasePart | Model, stopping_dista
 	self.LastChasePosition = nil
 	--
 
-	-- Remove existing chase logic
+	--
 	self.Keeper:Remove(ChaseCleanupKey)
 	--
 
@@ -648,7 +659,7 @@ function Pathfind.Chase(self: Pathfind, target: BasePart | Model, stopping_dista
 			return
 		end
 
-		-- Throttle
+		--
 		time_since_last_compute += dt
 
 		if time_since_last_compute < self.Config.RECALCULATE_THROTTLE then
@@ -729,7 +740,7 @@ function Pathfind.Stop(self: Pathfind)
 	self.PathComputeToken = (self.PathComputeToken or 0) + 1
 	--
 
-	-- Chase logic
+	--
 	self.ChaseTarget = nil
 	self.LastChasePosition = nil
 	self.Keeper:Remove(ChaseCleanupKey)

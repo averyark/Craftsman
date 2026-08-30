@@ -1,3 +1,4 @@
+--!nonstrict
 --[=[
 	@class StringUtil
 	A utility library containing common string manipulation and formatting operations.
@@ -185,7 +186,19 @@ end
 --
 function StringUtil.FormatDecimal(value: number, decimal_places: number?): string
 	local precision = decimal_places or 2
-	return string.format(`%.{precision}f`, value)
+	local multiplier = 10 ^ precision
+	local sign = value < 0 and "-" or ""
+	local scaled = math.floor(math.abs(value) * multiplier + 0.5)
+	local integer_part = math.floor(scaled / multiplier)
+
+	if precision <= 0 then
+		return `{sign}{integer_part}`
+	end
+
+	local fraction_text = tostring(scaled - integer_part * multiplier)
+	local padding = string.rep("0", precision - #fraction_text)
+
+	return `{sign}{integer_part}.{padding}{fraction_text}`
 end
 
 --[=[

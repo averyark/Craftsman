@@ -299,12 +299,15 @@ function TweenUtil.new(
 		end
 	end
 
-	if is_match then
-		PrintUtil:Warn(`Template "{name}" already exists with identical parameters. Ignoring new definition.`)
-		return existing_config
-	else
-		PrintUtil:Error(`Template "{name}" already exists with different parameters or properties. Name clashes are not allowed.`)
+	if not is_match then
+		PrintUtil:Error(
+			`Template "{name}" already exists with different parameters or properties. Name clashes are not allowed.`
+		)
 	end
+
+	PrintUtil:Warn(`Template "{name}" already exists with identical parameters. Ignoring new definition.`)
+
+	return existing_config
 	--
 end
 
@@ -356,7 +359,7 @@ local function play_config(config: { [string]: any }, instance: Instance): Tween
 	local target_animations = {}
 	parse_properties(instance, config.Properties, target_animations)
 
-	-- Unified Deduplication: stop any springs and cancel any active standard tweens driving target properties
+	--
 	local active_tweens_to_cancel = {}
 
 	for _, anim in target_animations do
@@ -390,7 +393,7 @@ local function play_config(config: { [string]: any }, instance: Instance): Tween
 	end
 	--
 
-	-- Execute animation
+	--
 	if config.Type == "Spring" then
 		for _, anim in target_animations do
 			Spr.target(anim.Instance, config.Damping, config.Frequency, anim.Properties)
@@ -438,16 +441,19 @@ local function play_config(config: { [string]: any }, instance: Instance): Tween
 	end
 
 	--
+	if #tweens == 0 then
+		return nil :: any
+	end
+
 	if #tweens == 1 then
 		tweens[1]:Play()
 		return tweens[1]
-	elseif #tweens > 1 then
-		local group = create_tween_group(tweens)
-		group:Play()
-		return group :: any
-	else
-		return nil :: any
 	end
+
+	local group = create_tween_group(tweens)
+	group:Play()
+
+	return group :: any
 	--
 end
 

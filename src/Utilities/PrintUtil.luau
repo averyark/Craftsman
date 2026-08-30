@@ -15,6 +15,18 @@ const Repr = require("../Repr")
 --
 local PrintUtil = {}
 
+--
+local function format_two_decimals(value: number): string
+	local sign = value < 0 and "-" or ""
+	local scaled = math.floor(math.abs(value) * 100 + 0.5)
+	local integer_part = math.floor(scaled / 100)
+	local fraction_text = tostring(scaled - integer_part * 100)
+	local padding = string.rep("0", 2 - #fraction_text)
+
+	return `{sign}{integer_part}.{padding}{fraction_text}`
+end
+--
+
 local DEFAULT_INTERNAL_PREFIX = "Craftsman"
 local DEFAULT_INTERNAL_SUFFIX = ""
 
@@ -25,19 +37,18 @@ end
 
 local function get_formatted_prefix_and_suffix(...)
 	local module_name = get_calling_module_name()
-	if module_name then
-		return `[{module_name}] {...} {DEFAULT_INTERNAL_SUFFIX}`
-	else
+	if not module_name then
 		return `{DEFAULT_INTERNAL_PREFIX} {...} {DEFAULT_INTERNAL_SUFFIX}`
 	end
+
+	return `[{module_name}] {...} {DEFAULT_INTERNAL_SUFFIX}`
 end
 
 local function wrap_text(str: string, max_len: number): { string }
 	local lines = {}
 	local raw_lines = string.split(str, "\n")
 
-	for i = 1, #raw_lines do
-		local line = raw_lines[i]
+	for _, line in raw_lines do
 		if #line <= max_len then
 			table.insert(lines, line)
 			continue
@@ -124,8 +135,7 @@ function PrintUtil:Error(message, level: number?)
 	local formatted = get_formatted_prefix_and_suffix(tostring(message))
 	local blame = level or 1
 
-	-- `error` counts frames from itself, so shift by one to skip this function. Without
-	-- that, every level would be off by one and point back into PrintUtil.
+	--
 	error(formatted, if blame > 0 then blame + 1 else 0)
 end
 
@@ -136,15 +146,19 @@ end
 ]=]
 --
 function PrintUtil:Assert(condition, ...)
-	if not condition then
-		local args = { ... }
-		local formatted_args = {}
-		for i, arg in args do
-			formatted_args[i] = tostring(arg)
-		end
-		local message = table.concat(formatted_args, " ")
-		error(get_formatted_prefix_and_suffix(message))
+	if condition then
+		return
 	end
+
+	local args = { ... }
+	local formatted_args = {}
+
+	for i, arg in args do
+		formatted_args[i] = tostring(arg)
+	end
+
+	local message = table.concat(formatted_args, " ")
+	error(get_formatted_prefix_and_suffix(message))
 end
 
 --[=[
@@ -176,7 +190,7 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 		end
 	end
 
-	-- Normalize rows into an array of row-tables (numeric indexed)
+	--
 	local row_list = {}
 	local function is_array(t)
 		return type(t) == "table" and #t > 0
@@ -191,10 +205,12 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 			local is_row_obj = false
 			if type(v) == "table" and getmetatable(v) == nil then
 				for j = 2, #headers do
-					if v[headers[j]] ~= nil then
-						is_row_obj = true
-						break
+					if v[headers[j]] == nil then
+						continue
 					end
+
+					is_row_obj = true
+					break
 				end
 			end
 
@@ -212,7 +228,7 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 		end
 	end
 
-	-- Ensure we have headers when none are provided
+	--
 	local col_count = #headers
 	if col_count == 0 then
 		for _, r in row_list do
@@ -223,15 +239,14 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 		end
 	end
 
-	-- Build string representations and compute widths
+	--
 	local widths = {}
 	for i = 1, col_count do
 		widths[i] = #tostring(headers[i])
 	end
 
 	local formatted = {}
-	for ri = 1, #row_list do
-		local r = row_list[ri]
+	for ri, r in row_list do
 		formatted[ri] = {}
 		for ci = 1, col_count do
 			local v = r[ci]
@@ -242,7 +257,7 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 				if v % 1 == 0 then
 					s = tostring(v)
 				else
-					s = string.format("%.2f", v)
+					s = format_two_decimals(v)
 				end
 			elseif type(v) == "table" then
 				s = Repr(v)
@@ -253,16 +268,18 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 			local cell_lines = wrap_text(s, max_width)
 			formatted[ri][ci] = cell_lines
 
-			for li = 1, #cell_lines do
-				local len = #cell_lines[li]
-				if len > widths[ci] then
-					widths[ci] = len
+			for _, cell_line in cell_lines do
+				local len = #cell_line
+				if len <= widths[ci] then
+					continue
 				end
+
+				widths[ci] = len
 			end
 		end
 	end
 
-	-- Print title decoration (dynamic width)
+	--
 	if title ~= "" then
 		local title_str = tostring(title)
 		local title_display = "  " .. title_str
@@ -284,7 +301,7 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 		print_line("")
 	end
 
-	-- Helper to build borders
+	--
 	local function build_border(left, mid, right)
 		local out = "  " .. left
 		for i = 1, col_count do
@@ -296,37 +313,39 @@ function PrintUtil:ListPrint(title, columns, rows, max_width)
 
 	print_line(build_border("┌", "┬", "┐"))
 
-	-- Header row
-	local headerLine = "  │"
+	--
+	local header_line = "  │"
 	for i = 1, col_count do
 		local h = headers[i] or ""
-		headerLine = headerLine .. " " .. h .. string.rep(" ", widths[i] - #h) .. " │"
+		header_line = header_line .. " " .. h .. string.rep(" ", widths[i] - #h) .. " │"
 	end
-	print_line(headerLine)
+	print_line(header_line)
 
 	print_line(build_border("├", "┼", "┤"))
 
-	-- Data rows
-	for ri = 1, #formatted do
+	--
+	for ri, formatted_row in formatted do
 		local max_lines = 1
 		for ci = 1, col_count do
-			max_lines = math.max(max_lines, #formatted[ri][ci])
+			max_lines = math.max(max_lines, #formatted_row[ci])
 		end
 
 		for li = 1, max_lines do
-			local rowLine = "  │"
+			local row_line = "  │"
 			for ci = 1, col_count do
-				local cell_lines = formatted[ri][ci]
+				local cell_lines = formatted_row[ci]
 				local cell = cell_lines[li] or ""
 				local orig = row_list[ri] and row_list[ri][ci]
-				local alignRight = type(orig) == "number"
-				if alignRight then
-					rowLine = rowLine .. " " .. string.rep(" ", widths[ci] - #cell) .. cell .. " │"
-				else
-					rowLine = rowLine .. " " .. cell .. string.rep(" ", widths[ci] - #cell) .. " │"
+				local padding = string.rep(" ", widths[ci] - #cell)
+
+				if type(orig) == "number" then
+					row_line = row_line .. " " .. padding .. cell .. " │"
+					continue
 				end
+
+				row_line = row_line .. " " .. cell .. padding .. " │"
 			end
-			print_line(rowLine)
+			print_line(row_line)
 		end
 	end
 

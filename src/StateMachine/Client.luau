@@ -23,10 +23,7 @@ export type Machine = Types.Machine
 local MachinesById = (setmetatable({}, { __mode = "v" }) :: any) :: { [string]: Machine }
 local MachineIdsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: string }
 local ClientConnectionsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: any }
--- Sentinel used as the transition `source` for server-applied transitions, so the client's own
--- Transitioned listener can identify and skip echoing them back to the server. Unlike a boolean
--- suppress flag, this survives transitions that are queued and applied later via task.defer,
--- because the machine preserves `source` through its pending-transition queue.
+--
 local SERVER_SOURCE = newproxy(false)
 local DestroyConnectionsByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: any }
 local CachedStatesByMachine = (setmetatable({}, { __mode = "k" }) :: any) :: { [Machine]: { [string]: any } }
@@ -85,7 +82,7 @@ local function resolve_payload_id(payload): string?
 end
 
 local function apply_payload(machine: Machine, payload: { [string]: any })
-	-- Drop stale payloads. Server stamps every transition. An out-of-order RequestState response (snapshot of an older state) carries a lower sequence than the live broadcast we already applied, so we must ignore it instead of reverting the machine.
+	--
 	local sequence = payload.Sequence
 	if type(sequence) == "number" then
 		local last = LastSequenceByMachine[machine]

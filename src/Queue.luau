@@ -122,10 +122,12 @@ local function random_jitter(base_delay: number, jitter_factor: number): number
 end
 
 local function remove_pending_by_id(pending: { QueueEntry }, id: number): QueueEntry?
-	for index = 1, #pending do
-		if pending[index].Id == id then
-			return table.remove(pending, index)
+	for index, entry in pending do
+		if entry.Id ~= id then
+			continue
 		end
+
+		return table.remove(pending, index)
 	end
 
 	return nil
@@ -294,8 +296,8 @@ function Queue._ResolveDrainWaiters(self: Queue)
 	local waiters = self._DrainWaiters
 	self._DrainWaiters = {}
 
-	for index = 1, #waiters do
-		waiters[index](true)
+	for _, waiter in waiters do
+		waiter(true)
 	end
 
 	self.Drained:Fire(self:GetStats())
@@ -712,8 +714,7 @@ function Queue.Clear(self: Queue, reason: string?)
 	self._Pending = {}
 	self._SuppressDrainResolution = true
 
-	for index = 1, #pending do
-		local entry = pending[index]
+	for _, entry in pending do
 		entry.CancelRequested = true
 		entry.CancelReason = reason
 		self:_RejectEntry(entry, reason, true)

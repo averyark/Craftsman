@@ -55,8 +55,7 @@ function TableUtil.Merge(...: { [any]: any }): { [any]: any }
 	local merged = {}
 	local sources = { ... }
 
-	for i = 1, #sources do
-		local source = sources[i]
+	for _, source in sources do
 		if type(source) ~= "table" then
 			continue
 		end
@@ -79,8 +78,7 @@ function TableUtil.DeepMerge(...: { [any]: any }): { [any]: any }
 	local merged = {}
 	local sources = { ... }
 
-	for i = 1, #sources do
-		local source = sources[i]
+	for _, source in sources do
 		if type(source) ~= "table" or getmetatable(source :: any) ~= nil then
 			continue
 		end
@@ -324,10 +322,12 @@ end
 function TableUtil.SafeRemoveAll<T>(array: { T }, value: T): boolean
 	local removed = false
 	for i = #array, 1, -1 do
-		if array[i] == value then
-			table.remove(array, i)
-			removed = true
+		if array[i] ~= value then
+			continue
 		end
+
+		table.remove(array, i)
+		removed = true
 	end
 	return removed
 end
@@ -346,10 +346,12 @@ function TableUtil.Except<K, V>(first: { [K]: V }, second: { [any]: any }): { [K
 
 	local second_is_array = true
 	for key in second :: any do
-		if type(key) ~= "number" then
-			second_is_array = false
-			break
+		if type(key) == "number" then
+			continue
 		end
+
+		second_is_array = false
+		break
 	end
 
 	if second_is_array then
@@ -364,10 +366,12 @@ function TableUtil.Except<K, V>(first: { [K]: V }, second: { [any]: any }): { [K
 
 	local first_is_array = true
 	for key in first :: any do
-		if type(key) ~= "number" then
-			first_is_array = false
-			break
+		if type(key) == "number" then
+			continue
 		end
+
+		first_is_array = false
+		break
 	end
 
 	if first_is_array then

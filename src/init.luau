@@ -2,45 +2,45 @@
 const RunService = game:GetService("RunService")
 
 export type Craftsman = {
-	Component: typeof(require("@self/Component")), -- Module Loader
-	Debounce: typeof(require("@self/Debounce")), -- Debouncing and Throttling
-	Concurrency: typeof(require("@self/Concurrency")), -- Keyed Concurrency Control (AsyncLock and KeyedDebounce)
-	Queue: typeof(require("@self/Queue")), -- Task Queue System
-	State: typeof(require("@self/StateMachine/State")), -- State Machine State
-	Machine: typeof(require("@self/StateMachine/Machine")), -- State Machine
-	Pathfind: typeof(require("@self/Pathfind")), -- Simple Pathfinding, cover most usecases
-	Spring: typeof(require("@self/Spring")), -- Spring System
+	Component: typeof(require("@self/Component")),
+	Debounce: typeof(require("@self/Debounce")),
+	Concurrency: typeof(require("@self/Concurrency")),
+	Queue: typeof(require("@self/Queue")),
+	State: typeof(require("@self/StateMachine/State")),
+	Machine: typeof(require("@self/StateMachine/Machine")),
+	Pathfind: typeof(require("@self/Pathfind")),
+	Spring: typeof(require("@self/Spring")),
 
-	Entity: typeof(require("@self/Entity")), -- Character or NPC abstraction
+	Entity: typeof(require("@self/Entity")),
 
-	DataServer: typeof(require("@self/Data/Server")), -- Server Data Manipulation
-	DataClient: typeof(require("@self/Data/Client")), -- Client Data Access
-	MarketServer: typeof(require("@self/Market/Server")), -- Server Marketplace Logic
-	MarketClient: typeof(require("@self/Market/Client")), -- Client Marketplace Access
-	StateMachine: typeof(require("@self/StateMachine")), -- State Machine Namespace
-	StateMachineServer: typeof(require("@self/StateMachine/Server")), -- Server State Machine Replication
-	StateMachineClient: typeof(require("@self/StateMachine/Client")), -- Client State Machine Replication
+	DataServer: typeof(require("@self/Data/Server")),
+	DataClient: typeof(require("@self/Data/Client")),
+	MarketServer: typeof(require("@self/Market/Server")),
+	MarketClient: typeof(require("@self/Market/Client")),
+	StateMachine: typeof(require("@self/StateMachine")),
+	StateMachineServer: typeof(require("@self/StateMachine/Server")),
+	StateMachineClient: typeof(require("@self/StateMachine/Client")),
 
-	StoreServer: typeof(require("@self/Store/Server")), -- Server Store Replication
-	StoreClient: typeof(require("@self/Store/Client")), -- Client Store Replication
+	StoreServer: typeof(require("@self/Store/Server")),
+	StoreClient: typeof(require("@self/Store/Client")),
 
-	InputUtil: typeof(require("@self/Utilities/InputUtil")), -- User Input Handling
-	TouchUtil: typeof(require("@self/Utilities/TouchUtil")), -- On-screen Touch Buttons
-	InterfaceUtil: typeof(require("@self/Utilities/InterfaceUtil")), -- Interface Scaling
-	PrintUtil: typeof(require("@self/Utilities/PrintUtil")), -- Debugging and Printing
-	TableUtil: typeof(require("@self/Utilities/TableUtil")), -- Table Manipulation Utilities
-	WorldUtil: typeof(require("@self/Utilities/WorldUtil")), -- World and Instance Utilities
+	InputUtil: typeof(require("@self/Utilities/InputUtil")),
+	TouchUtil: typeof(require("@self/Utilities/TouchUtil")),
+	InterfaceUtil: typeof(require("@self/Utilities/InterfaceUtil")),
+	PrintUtil: typeof(require("@self/Utilities/PrintUtil")),
+	TableUtil: typeof(require("@self/Utilities/TableUtil")),
+	WorldUtil: typeof(require("@self/Utilities/WorldUtil")),
 
-	AnimationUtil: typeof(require("@self/Utilities/AnimationUtil")), -- Animation Handling
-	SoundUtil: typeof(require("@self/Utilities/SoundUtil")), -- Sound Handling
-	TweenUtil: typeof(require("@self/Utilities/TweenUtil")), -- Tween Handling
-	Tag: typeof(require("@self/Tag")), -- Instance Tag Utility
+	AnimationUtil: typeof(require("@self/Utilities/AnimationUtil")),
+	SoundUtil: typeof(require("@self/Utilities/SoundUtil")),
+	TweenUtil: typeof(require("@self/Utilities/TweenUtil")),
+	Tag: typeof(require("@self/Tag")),
 
-	MathUtil: typeof(require("@self/Utilities/MathUtil")), -- Math Utilities
-	StringUtil: typeof(require("@self/Utilities/StringUtil")), -- String Utilities
+	MathUtil: typeof(require("@self/Utilities/MathUtil")),
+	StringUtil: typeof(require("@self/Utilities/StringUtil")),
 
-	Config: typeof(require("@self/Config")), -- Configuration Management
-	Store: typeof(require("@self/Store")), -- Store Utility
+	Config: typeof(require("@self/Config")),
+	Store: typeof(require("@self/Store")),
 }
 
 local loaders: { [string]: () -> any } = {

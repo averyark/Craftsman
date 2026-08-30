@@ -10,7 +10,7 @@ const MarketplaceService = game:GetService("MarketplaceService")
 const Players = game:GetService("Players")
 const RunService = game:GetService("RunService")
 
-local Signal = require("../Signal")
+const Signal = require("../Signal")
 
 const Config = require("../Config")
 

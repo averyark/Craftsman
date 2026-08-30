@@ -6,7 +6,7 @@
 	Created     > 13/06/2026
 --]]
 
-local ByteNet = require("../../../../ByteNet")
+const ByteNet = require("../../../../ByteNet")
 
 local Network = ByteNet.defineNamespace("CraftsmanStore", function()
 	return {

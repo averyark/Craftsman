@@ -289,7 +289,7 @@ function Machine.Stop(self: Machine, context: any?, source: Player?): boolean
 
 	self._Current = nil
 	self._Running = false
-	-- Drop any queued transitions so a deferred drain cannot resurrect a stopped machine.
+	--
 	reset_transition_queue(self)
 	self.Transitioned:Fire(self, previous, nil, context, source)
 	return true
@@ -496,11 +496,11 @@ end
 	Registers the machine for networking/replication.
 ]=]
 function Machine.Replicate(self: Machine, targets: { any }?): boolean
-	if RunService:IsServer() then
-		return Server:Register(self, targets)
-	else
+	if not RunService:IsServer() then
 		return Client:Register(self)
 	end
+
+	return Server:Register(self, targets)
 end
 
 --[=[
@@ -510,11 +510,11 @@ end
 	Unregisters the machine from replication.
 ]=]
 function Machine.Unreplicate(self: Machine): boolean
-	if RunService:IsServer() then
-		return Server:Unregister(self)
-	else
+	if not RunService:IsServer() then
 		return Client:Unregister(self)
 	end
+
+	return Server:Unregister(self)
 end
 
 --[=[
@@ -539,11 +539,11 @@ end
 	Manually syncs replication state.
 ]=]
 function Machine.SyncReplication(self: Machine, targets: { any }?): boolean
-	if RunService:IsServer() then
-		return Server:Sync(self, targets)
-	else
+	if not RunService:IsServer() then
 		return Client:Sync(self)
 	end
+
+	return Server:Sync(self, targets)
 end
 
 MachineModule.new = new

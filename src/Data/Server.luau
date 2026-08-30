@@ -13,9 +13,9 @@ const RunService = game:GetService("RunService")
 const DocumentService = require("../../../../DocumentService")
 const Promise = require("../../../../Promise")
 const GreenTea = require("../../../../gt")
-local Signal = require("../Signal")
+const Signal = require("../Signal")
 
-const Config = require(".././Config") -- Your default data dictionary
+const Config = require(".././Config")
 const PrintUtil = require("../Utilities/PrintUtil")
 const TableUtil = require("../Utilities/TableUtil")
 
@@ -233,8 +233,7 @@ Data.Loaded = {
 			fn(player, state)
 		end
 
-		-- Listen for the next load. Guarded by `fired` so a replayed already-loaded
-		-- player and a future load can never both invoke the callback.
+		--
 		conn = RealLoadedSignal:Connect(fire_once)
 
 		for player, record in PlayerRecords do
@@ -472,15 +471,14 @@ function Data:Shutdown()
 		return
 	end
 
-	-- Do not change this to a pairs loop. This is to avoid issues with PlayerRecords being modified while iterating.
+	--
 	local players = {}
 
 	for player in PlayerRecords do
 		players[#players + 1] = player
 	end
 
-	for index = 1, #players do
-		local player = players[index]
+	for _, player in players do
 		local record = PlayerRecords[player]
 
 		if not record then

@@ -58,8 +58,7 @@ function AnimationUtil.QuickPlay(
 		track.Priority = safe_props.Priority
 	end
 
-	-- QuickPlay is fire-and-forget and self-destroys on Ended, which never fires for a looped
-	-- track. Force non-looped so the track and cloned animation cannot leak.
+	--
 	if safe_props.Looped then
 		PrintUtil:Warn("AnimationUtil.QuickPlay does not support looped animations; ignoring Looped.")
 	end
@@ -173,7 +172,7 @@ function Animate.Load(
 
 		local track = self.Container:LoadAnimation(clone)
 
-		-- Tear down any track/animation previously loaded under this name to avoid leaking it.
+		--
 		local existing_name = param.AnimationName or param.FromRegistry
 		if self.Tracks[existing_name] then
 			self.Tracks[existing_name]:Stop()
@@ -219,7 +218,7 @@ function Animate.Load(
 	--
 	local track = self.Container:LoadAnimation(animation)
 
-	-- Tear down any track/animation previously loaded under this name to avoid leaking it.
+	--
 	if self.Tracks[param.AnimationName] then
 		self.Tracks[param.AnimationName]:Stop()
 		self.Tracks[param.AnimationName]:Destroy()

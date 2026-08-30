@@ -6,9 +6,7 @@
     Created     > 13/06/2026
 --]]
 
--- [IMPORTANT NOTE]
--- Unfortunately we cannot cast the State generic onto both the producer's definition Actions state parameter and the :subscribe or :subscribePlayer listener state parameter at the same time. Seems like a luau limitation for now.
--- I specifically chose to cast the State generic only onto the subscribe listener as it is more common for users to want typed state in their subscribe callbacks than in their action definition callbacks.
+--
 
 const Reflex = require("../../../Reflex")
 

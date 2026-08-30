@@ -50,9 +50,9 @@ local function resolve_dependencies(nodes: { ModuleNode }, node_by_contents: { [
 		--
 
 		--
-		for index = 1, #declared do
+		for index, declared_contents in declared do
 			--
-			local dependency_node = node_by_contents[declared[index]]
+			local dependency_node = node_by_contents[declared_contents]
 
 			if not dependency_node then
 				PrintUtil:Warn(
@@ -164,8 +164,8 @@ function Component:LoadModulesAsync(modules: Instance)
 	--
 
 	--
-	for index = 1, #Config.MODULE_LOAD_ORDER do
-		module_order[Config.MODULE_LOAD_ORDER[index]] = index
+	for index, module_name in Config.MODULE_LOAD_ORDER do
+		module_order[module_name] = index
 	end
 	--
 
@@ -255,10 +255,10 @@ function Component:LoadModulesAsync(modules: Instance)
 			local node_by_contents: { [any]: ModuleNode } = {}
 			local node_by_name: { [string]: ModuleNode } = {}
 
-			for index = 1, #init_results do
+			for index, init_result in init_results do
 				--
 				local module_name = module_names[index]
-				local module_contents = init_results[index].contents
+				local module_contents = init_result.contents
 
 				loaded_modules[module_name] = module_contents
 				self.Modules[module_name] = module_contents
@@ -301,8 +301,8 @@ function Component:LoadModulesAsync(modules: Instance)
 				)
 
 				local previous_node = nil
-				for index = 1, #Config.MODULE_LOAD_ORDER do
-					local node = node_by_name[Config.MODULE_LOAD_ORDER[index]]
+				for _, module_name in Config.MODULE_LOAD_ORDER do
+					local node = node_by_name[module_name]
 					if not node then
 						continue
 					end
@@ -377,7 +377,7 @@ function Component:LoadModulesAsync(modules: Instance)
 			--
 
 			return Promise.all(settled):andThen(function()
-				-- Retained so StopModulesAsync can walk the same graph backwards.
+				--
 				self.Nodes = nodes
 				self.IsLoaded = true
 				PrintUtil:Print("Loaded", #nodes, "modules")

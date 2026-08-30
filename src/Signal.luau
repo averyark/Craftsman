@@ -6,7 +6,7 @@
     Created     > 22/05/2026
 --]]
 
-local Signal = require(game.ReplicatedStorage.Packages.Signal)
+const Signal = require(game.ReplicatedStorage.Packages.Signal)
 
 export type Connection = {
 	Disconnect: (self: Connection) -> (),

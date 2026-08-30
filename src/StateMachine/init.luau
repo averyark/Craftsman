@@ -18,19 +18,19 @@ local StateMachine = {
 }
 
 function StateMachine.Register(machine, targets: { any }?): boolean
-	if RunService:IsServer() then
-		return StateMachine.Server:Register(machine, targets)
-	else
+	if not RunService:IsServer() then
 		return StateMachine.Client:Register(machine)
 	end
+
+	return StateMachine.Server:Register(machine, targets)
 end
 
 function StateMachine.Unregister(machine): boolean
-	if RunService:IsServer() then
-		return StateMachine.Server:Unregister(machine)
-	else
+	if not RunService:IsServer() then
 		return StateMachine.Client:Unregister(machine)
 	end
+
+	return StateMachine.Server:Unregister(machine)
 end
 
 return StateMachine

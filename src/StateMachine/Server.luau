@@ -18,13 +18,12 @@ local Server = {}
 local StateMachineConfig = Config.STATE_MACHINE or {}
 local Started = false
 
--- Minimum seconds between accepted client updates per (player, machine). Optional config override.
+--
 local CLIENT_UPDATE_MIN_INTERVAL = StateMachineConfig.CLIENT_UPDATE_MIN_INTERVAL or 0.05
 local LastClientUpdate = (setmetatable({}, { __mode = "k" }) :: any) :: { [Player]: { [string]: number } }
 
 local function is_valid_client_context(context: any): boolean
-	-- Client Context is forwarded to state handlers and rebroadcast to other clients, so reject
-	-- anything that is not nil or a plain table from untrusted client payloads.
+	--
 	return context == nil or type(context) == "table"
 end
 
@@ -150,10 +149,12 @@ local function is_target_player(targets: { Player }, player: Player?): boolean
 		return false
 	end
 
-	for index = 1, #targets do
-		if targets[index] == player then
-			return true
+	for _, target in targets do
+		if target ~= player then
+			continue
 		end
+
+		return true
 	end
 
 	return false
@@ -172,8 +173,7 @@ local function send_payload(payload: { [string]: any }, targets: { Player }?, ex
 
 		local players = Players:GetPlayers()
 		local active_targets = {}
-		for index = 1, #players do
-			local player = players[index]
+		for _, player in players do
 			if player == exclude_player then
 				continue
 			end
@@ -192,8 +192,7 @@ local function send_payload(payload: { [string]: any }, targets: { Player }?, ex
 	end
 
 	local active_targets = {}
-	for index = 1, #targets do
-		local player = targets[index]
+	for _, player in targets do
 		if player == exclude_player then
 			continue
 		end
@@ -271,7 +270,7 @@ function Server:Init()
 			return
 		end
 
-		-- Rate-limit per (player, machine) to blunt transition spam / DoS.
+		--
 		local now = os.clock()
 		local player_times = LastClientUpdate[player]
 		if player_times == nil then

@@ -344,15 +344,21 @@ end
 local function resolve_position(point: Vector3 | CFrame | BasePart | Model): Vector3
 	if typeof(point) == "Vector3" then
 		return point
-	elseif typeof(point) == "CFrame" then
-		return point.Position
-	elseif point:IsA("BasePart") then
-		return point.Position
-	elseif point:IsA("Model") then
-		return point:GetPivot().Position
-	else
-		error("Invalid point type")
 	end
+
+	if typeof(point) == "CFrame" then
+		return point.Position
+	end
+
+	if point:IsA("BasePart") then
+		return point.Position
+	end
+
+	if point:IsA("Model") then
+		return point:GetPivot().Position
+	end
+
+	error("Invalid point type")
 end
 
 --[=[

@@ -81,17 +81,18 @@ local function unindex_action(action_name: string)
 		return
 	end
 
-	for i = 1, #key_array do
-		local actions = ActionsByKey[key_array[i]]
-		if actions then
-			actions[action_name] = nil
+	for _, key in key_array do
+		local actions = ActionsByKey[key]
+		if not actions then
+			continue
 		end
+
+		actions[action_name] = nil
 	end
 end
 
 local function index_action(action_name: string, key_array: { InputKey })
-	for i = 1, #key_array do
-		local key = key_array[i]
+	for _, key in key_array do
 		local actions = ActionsByKey[key]
 
 		if actions == nil then
@@ -142,8 +143,8 @@ local function release_key_sources(action_name: string, key_array: { InputKey }?
 	end
 
 	if key_array then
-		for i = 1, #key_array do
-			set_action_state(action_name, false, key_array[i], FOCUS_LOST_INPUT)
+		for _, key in key_array do
+			set_action_state(action_name, false, key, FOCUS_LOST_INPUT)
 		end
 		return
 	end
@@ -316,12 +317,13 @@ function InputUtil.GetMovementVector(): Vector3
 	end
 
 	local gamepad_state = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
-	for i = 1, #gamepad_state do
-		local input = gamepad_state[i]
-		if input.KeyCode == Enum.KeyCode.Thumbstick1 then
-			movement_vector += Vector3.new(input.Position.X, 0, -input.Position.Y)
-			break
+	for _, input in gamepad_state do
+		if input.KeyCode ~= Enum.KeyCode.Thumbstick1 then
+			continue
 		end
+
+		movement_vector += Vector3.new(input.Position.X, 0, -input.Position.Y)
+		break
 	end
 
 	if movement_vector.Magnitude > 0 then
