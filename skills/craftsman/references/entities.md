@@ -160,15 +160,30 @@ Drives an NPC along `PathfindingService` paths. It handles throttled re-pathing,
 | `STUCK_RETRIES` | `2` |
 | `STALL_TIMEOUT` | `2` |
 | `PARTIAL_PATH` | `true` |
+| `DIRECT_PATH` | `true` |
+| `DIRECT_PATH_MAX_DISTANCE` | `40` |
+| `DIRECT_PATH_MAX_STEP` | `2` |
 | `VISUALISE` | `false` |
 
 `VISUALISE` is read only at construction. It draws a billboard, waypoint balls and lines.
+
+**Direct paths.** With `DIRECT_PATH` on, the NPC skips `PathfindingService` and walks straight at the target when all of these hold:
+- `AGENT_COSTS` is empty;
+- the target is within `DIRECT_PATH_MAX_DISTANCE` studs horizontally and `AGENT_HEIGHT` vertically;
+- a spherecast to the target hits nothing;
+- no step along the line is taller than `DIRECT_PATH_MAX_STEP`.
+
+`OnPathCalculated` then fires with a **single waypoint**. The line is rechecked every `RECALCULATE_THROTTLE`, and the NPC falls back to a full compute when something blocks it. Set `DIRECT_PATH = false` when code needs the full waypoint list, or when costs must apply.
+
+**Scheduling.** One shared `Heartbeat` steps every NPC. Full computes are queued globally and capped by `Config.PATHFIND.MAX_COMPUTES_PER_FRAME` and `MAX_CONCURRENT_COMPUTES` (see `lifecycle.md`). `Goto` therefore does not compute synchronously: the earliest a path starts is the next frame. Recalculate requests made while a compute is queued or running are merged.
 
 ### Methods (colon)
 
 | Call | Behaviour |
 |---|---|
 | `Goto(position)` | Computes a path (throttled) and walks it. Cancels any chase. |
+| `GotoAsync(position)` | Like `Goto`, but returns `Promise<()>`. It resolves on arrival and rejects with `"Stuck"`, `"Unreachable"`, a `PathStatus` name, the compute error, or `"Link:<label>"`. `Goto`, `GotoAsync`, `Chase`, `Stop` and `Destroy` cancel it. Calling `:cancel()` on the promise stops the NPC. |
+| `SetLinkHandler(label, handler?)` | Handles `PathfindingLink` waypoints whose `Label` is `label` for this NPC. Pass `nil` to remove it. |
 | `Chase(target: BasePart \| Model, stopping_distance?)` | Re-paths while the target moves, and re-paths periodically while idle. Inside `stopping_distance` it halts and fires `OnArrived`. It calls `Stop` on its own when the target is removed or its Humanoid dies. Calling `Chase` again replaces the previous chase. |
 | `Stop()` | Cancels the chase, clears the path, moves the NPC to where it stands and fires `OnPathEnded`. |
 | `Destroy()` | Cleans everything up. It does **not** call `Stop`, so call `Stop()` first if the NPC should halt. |
@@ -187,6 +202,19 @@ Drives an NPC along `PathfindingService` paths. It handles throttled re-pathing,
 | `OnPathFailed(reason)` | No usable path was found. `reason` is `"Unreachable"`, a `PathStatus` name, or the error from `ComputeAsync`. |
 
 Useful fields: `IsMoving`, `Waypoints`, `CurrentWaypointIndex`, `TargetPosition`, `ChaseTarget`, `Keeper`.
+
+### Module functions (dot)
+
+| Call | Behaviour |
+|---|---|
+| `Pathfind.SetLinkHandler(label, handler?)` | Registers a link handler for every NPC. A handler set on the NPC takes priority. |
+| `Pathfind.GetStats()` | Returns `{ Agents, Queued, InFlight }`: live NPCs, computes waiting, computes running. |
+
+### Links
+
+A link handler is `(pathfind, from: PathWaypoint, to: PathWaypoint) -> ()`. It runs when the NPC reaches a waypoint with `Action = Custom` and a matching `Label`. It may yield. When it returns, the NPC moves on to the next waypoint. If it throws, the error is reported, the NPC halts and a pending `GotoAsync` rejects with `"Link:<label>"`. A custom waypoint with no handler is walked like any other waypoint.
+
+Exported types: `Pathfind`, `PathfindConfig`, `PathResult`, `PathfindStats`, `LinkHandler`.
 
 ```lua
 local humanoid = npc:FindFirstChildOfClass("Humanoid")

@@ -165,6 +165,9 @@ return {
   - `EDIT_GRID` (`0`), `DRAG_THRESHOLD` (`6`) and the edit-handle styling
   - `JUMP_BUTTON_EDITABLE` (`true`)
   - `LAYOUT_VERSION` (`2`). Bump it to invalidate saved layouts.
+- **`PATHFIND`** caps the shared path-compute queue for every `Pathfind` NPC. Both keys are read every frame, so `Configure` takes effect live.
+  - `MAX_COMPUTES_PER_FRAME`: default `4`
+  - `MAX_CONCURRENT_COMPUTES`: default `12`
 
 ## Keeper (cleanup)
 
@@ -212,5 +215,5 @@ end
   - Listeners connect in `Start`.
   - Every Craftsman event (`Entity.Died`, `InputUtil.Began`, `Queue.Succeeded`, …) is a Signal: use `:Connect`, `:Once` and `:Wait` on it.
 - **`Promise`** is typed-promise (evaera API): `Promise.new`, `.try`, `.all`, `:andThen`, `:catch`, `:await` and `:expect`.
-  - `LoadModulesAsync`, `Queue:Enqueue`, `Queue:Drain` and `Pathfind:ComputePathToAsync` all return promises.
+  - `LoadModulesAsync`, `Queue:Enqueue`, `Queue:Drain`, `Pathfind:GotoAsync` and `Pathfind:ComputePathToAsync` all return promises.
   - Always `:catch` a rejection you don't propagate, or Promise warns about it.

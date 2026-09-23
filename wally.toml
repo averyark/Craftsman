@@ -1,0 +1,23 @@
+[package]
+name = "averyark/craftsman"
+version = "0.9.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+authors = ["averyark"]
+license = "MIT"
+description = "Craftsman is a proprietary roblox scripting framework and scripting kit."
+exclude = ["**"]
+include = [
+    "src",
+    "src/**",
+    "default.project.json",
+    "wally.toml",
+    "readme.md",
+    "CHANGELOG.md",
+]
+
+[dependencies]
+Promise = "howmanysmall/typed-promise@4.0.6"
+ByteNet = "elitriare/bytenet-max@0.2.7"
+Signal = "sleitnick/signal@2.0.3"
+Keeper = "averyark/keeper@1.10.2"

@@ -4,9 +4,14 @@ A Roblox Luau framework: a lifecycle loader, entities, tags, state machines, tas
 
 ```toml
 # ember.toml
+[indices]
+wally = "https://github.com/UpliftGames/wally-index"
+
 [dependencies]
-Craftsman = { name = "averyark/craftsman", version = "^0.9.0" }
+Craftsman = { name = "averyark/craftsman", version = "^0.9.0", index = "wally" }
 ```
+
+Install it with [Ember](https://luaupm.com). Craftsman is published to the Wally index, but it requires its dependencies in Ember's layout, so the Wally CLI cannot install it.
 
 ## Agent skill
 

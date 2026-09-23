@@ -14,20 +14,24 @@ rewritten around a shared scheduler.
 Read every **Breaking** note before upgrading. Most games will hit at least two: the move to Ember,
 and `PrintUtil` losing `Print`, `Warn`, `Error` and `Assert`.
 
-### Breaking — Craftsman ships on Ember, not Wally
+### Breaking — Craftsman installs with Ember, not the Wally CLI
 
-**What changed.** The package is published to the Ember registry as `averyark/craftsman`. Wally
-releases stop at `0.8.4`.
+**What changed.** Craftsman is still published to the Wally index as `averyark/craftsman`, but
+you install it with Ember, which reads the Wally index:
 
 ```toml
 # ember.toml
+[indices]
+wally = "https://github.com/UpliftGames/wally-index"
+
 [dependencies]
-Craftsman = { name = "averyark/craftsman", version = "^0.9.0" }
+Craftsman = { name = "averyark/craftsman", version = "^0.9.0", index = "wally" }
 ```
 
 Craftsman now requires its dependencies relative to itself, as `../packages/roblox/Promise` and so
-on, which is the layout Ember installs. Copying `src` into a Wally `Packages` folder no longer
-works: the requires will not resolve.
+on, which is the layout Ember installs. `wally install` puts dependencies beside the package
+instead, so those requires resolve to nothing. Copying `src` into a Wally `Packages` folder fails
+the same way.
 
 **Dependencies.** Craftsman now depends on four packages:
 

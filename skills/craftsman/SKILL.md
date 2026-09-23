@@ -28,11 +28,14 @@ local Craftsman = require(game:GetService("ReplicatedStorage").Packages.Craftsma
 - `Craftsman.StateMachineServer` is **`nil` on the client**.
 - The framework is built on `Keeper` (cleanup), `Signal` (events), `Promise` (async) and `ByteNet` (networking). If game code uses any of these directly, add them as the project's own dependencies.
 
-Install with Ember (`ember.toml`):
+Install with Ember from the Wally index (`ember.toml`). The Wally CLI cannot install it.
 
 ```toml
+[indices]
+wally = "https://github.com/UpliftGames/wally-index"
+
 [dependencies]
-Craftsman = { name = "averyark/craftsman", version = "^0.9.0" }
+Craftsman = { name = "averyark/craftsman", version = "^0.9.0", index = "wally" }
 ```
 
 ## Pick the right module
