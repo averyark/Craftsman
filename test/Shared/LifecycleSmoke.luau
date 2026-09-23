@@ -12,14 +12,12 @@
     `task` and `Keeper` -- so it proves the logic and not the integration. This runs the
     real loader over real ModuleScripts in a real boot.
 
-    Covers: P1.3 dependency-ordered start, P1.4 Stop + Keeper, P1.1 config inversion,
-    P2.1 radian helpers, P2.2 Entity rig accessors.
+    Covers: the Component alias to Lifecycle (0.10.0), P1.1 config inversion,
+    P2.1 radian helpers, P2.2 Entity rig accessors. The loader itself is tested in
+    averyark/craftsman-lifecycle.
 --]]
 
-const ReplicatedStorage = game:GetService("ReplicatedStorage")
-
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
-const SmokeRecord = require("@game/ReplicatedStorage/Shared/SmokeRecord")
 
 local LifecycleSmoke = {}
 
@@ -35,76 +33,12 @@ function LifecycleSmoke.Run(context: "server" | "client"): number
 		end
 	end
 
-	-- P1.3 / P1.4 -----------------------------------------------------------------
-	-- Drive the fixtures through a scratch loader rather than the one that booted the
-	-- game: StopModulesAsync would otherwise tear down the very modules running this.
-	-- Its own Modules/LoadedModules are seeded so `self.Modules or {}` cannot reach
-	-- through the metatable and share the real loader's tables.
-	local loader = setmetatable(
-		{ Modules = {}, LoadedModules = {} } :: typeof(Craftsman.Component),
-		{ __index = Craftsman.Component }
-	)
-
-	-- Not a dot-index: that hard-errors with nothing actionable, and on the client the
-	-- folder has to replicate first. Adding Fixtures to test.project.json also needs a
-	-- fresh sync -- rojo serve does not pick up a new top-level tree node on its own.
-	local fixtures = ReplicatedStorage:FindFirstChild("Fixtures") or ReplicatedStorage:WaitForChild("Fixtures", 5)
-	if not fixtures then
-		check(
-			"ReplicatedStorage.Fixtures exists",
-			false,
-			"missing -- rebuild the place (rojo build test.project.json) or restart rojo serve"
-		)
-		warn(`[LifecycleSmoke/{context}] {failures} of {checks} checks FAILED`)
-		return failures
-	end
-
-	SmokeRecord.Reset()
-	local loaded_ok, loaded_err = loader:LoadModulesAsync(fixtures):await()
-	check("fixtures loaded", loaded_ok, tostring(loaded_err))
-
-	local alpha_end = SmokeRecord.IndexOf("Alpha", "start_end")
-	local beta_begin = SmokeRecord.IndexOf("Beta", "start_begin")
-	local solo_begin = SmokeRecord.IndexOf("Solo", "start_begin")
-
-	check("Alpha started", alpha_end ~= nil)
-	check("Beta started", beta_begin ~= nil)
-	check("Solo started", solo_begin ~= nil)
-
-	if alpha_end and beta_begin then
-		-- The declared edge: Beta must not begin until Alpha has *finished*.
-		check("Beta waited for its declared dependency", beta_begin > alpha_end, "Beta started before Alpha finished")
-	end
-
-	if alpha_end and solo_begin then
-		-- The absence of an edge: Solo must not be dragged behind Alpha's yield.
-		check("Solo ran concurrently with Alpha's yield", solo_begin < alpha_end, "independent modules serialised")
-	end
-
-	-- Read before Stop: StopModulesAsync clears LoadedModules.
-	local solo_module = loader.LoadedModules.Solo
-	check("Solo was loaded", solo_module ~= nil)
-	check("loader granted the module a Keeper", solo_module ~= nil and solo_module.Keeper ~= nil)
-	check(
-		"the scratch loader did not share the real loader's tables",
-		loader.LoadedModules ~= Craftsman.Component.LoadedModules
-	)
-
-	local stopped_ok, stopped_err = loader:StopModulesAsync():await()
-	check("fixtures stopped", stopped_ok ~= false, tostring(stopped_err))
-
-	local beta_stop = SmokeRecord.IndexOf("Beta", "stop")
-	local alpha_stop = SmokeRecord.IndexOf("Alpha", "stop")
-	check("Beta stopped", beta_stop ~= nil)
-	check("Alpha stopped", alpha_stop ~= nil)
-
-	if beta_stop and alpha_stop then
-		-- Teardown is the start graph reversed: the dependent goes first.
-		check("dependent stopped before its dependency", beta_stop < alpha_stop, "a dependency was torn down first")
-	end
-
-	check("Keeper cleaned up on Stop", SmokeRecord.IndexOf("Solo", "keeper_cleaned") ~= nil)
-	check("loader reports unloaded", loader.IsLoaded == false)
+	-- 0.10.0 ---------------------------------------------------------------------
+	-- The loader moved to averyark/craftsman-lifecycle, which tests it. Here it only
+	-- has to be the same module Craftsman.Component forwards to.
+	local Lifecycle = require("@game/ReplicatedStorage/Packages/packages/roblox/Lifecycle")
+	check("Craftsman.Component forwards to Lifecycle", rawequal(Craftsman.Component, Lifecycle))
+	check("the forwarded loader can load", type(Craftsman.Component.LoadModulesAsync) == "function")
 
 	-- P1.1 ------------------------------------------------------------------------
 	-- The consumer's CraftsmanConfig is now optional rather than hard-required. This

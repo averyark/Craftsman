@@ -10,6 +10,7 @@ const Players = game:GetService("Players")
 const RunService = game:GetService("RunService")
 
 const Craftsman = require("@game/ReplicatedStorage/Packages/Craftsman")
+const Lifecycle = require("@game/ReplicatedStorage/Packages/packages/roblox/Lifecycle")
 
 require("../Packages/packages/roblox/ByteNet")
 
@@ -53,7 +54,7 @@ function Bootstrap:Start(modules: Instance?)
 	start_services()
 
 	if modules then
-		Craftsman.Component:LoadModulesAsync(modules):await()
+		Lifecycle:LoadModulesAsync(modules):await()
 	end
 	--
 

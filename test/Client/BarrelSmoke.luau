@@ -5,7 +5,7 @@
     Contact     > Twitter: https://twitter.com/averyark_
     Created     > 16/07/2026
 
-    Client half of the lazy-barrel smoke test. Picked up by Component:LoadModulesAsync
+    Client half of the lazy-barrel smoke test. Picked up by Lifecycle:LoadModulesAsync
     from ReplicatedStorage.Client, so it runs during a normal boot.
 
     The client half also covers the server-only exports resolving to nil rather than

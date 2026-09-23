@@ -5,6 +5,43 @@ version, as `0.7.0` did.
 
 ---
 
+## 0.10.0
+
+The module loader leaves Craftsman Kit. It is now `averyark/craftsman-lifecycle` 1.0.0, a
+package of its own, and Craftsman Kit depends on it.
+
+### Deprecated: `Craftsman.Component`
+
+**What changed.** `Craftsman.Component` returns the Lifecycle module, and warns once when it is
+first used. It is removed in the next minor version.
+
+**What to do.** Add Lifecycle to `ember.toml` and require it where the game boots:
+
+```toml
+Lifecycle = { name = "averyark/craftsman-lifecycle", version = "^1.0.0", index = "wally" }
+```
+
+```lua
+local Lifecycle = require(ReplicatedStorage.Packages.Lifecycle)
+
+Lifecycle:LoadModulesAsync(ServerScriptService.Services):await()
+```
+
+The method names are the same. The loader's behaviour did change, and Lifecycle's changelog
+lists how. The changes most likely to reach a game:
+
+- `Init` runs in dependency order, after every module in the folder is required.
+- A module that errors while being required no longer stops the rest of the folder.
+- Two modules with the same name are refused instead of one replacing the other.
+- Loading a second folder into the same loader adds to it, so one `StopModulesAsync` stops both.
+
+### Removed: `Config.MODULE_LOAD_ORDER` does nothing
+
+The loader no longer reads it. The field is still accepted, so a `CraftsmanConfig` that sets it
+still loads, but `Craftsman.Component` warns when it is set. Declare `Dependencies` instead.
+
+---
+
 ## Renamed to Craftsman Kit
 
 The package is now `averyark/craftsman-kit`, and the repository is `averyark/craftsman-kit`.

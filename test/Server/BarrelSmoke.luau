@@ -5,7 +5,7 @@
     Contact     > Twitter: https://twitter.com/averyark_
     Created     > 16/07/2026
 
-    Server half of the lazy-barrel smoke test. Picked up by Component:LoadModulesAsync
+    Server half of the lazy-barrel smoke test. Picked up by Lifecycle:LoadModulesAsync
     from ServerScriptService.Server, so it runs during a normal boot.
 --]]
 

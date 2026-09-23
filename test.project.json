@@ -20,9 +20,6 @@
       },
       "Client": {
         "$path": "test/Client"
-      },
-      "Fixtures": {
-        "$path": "test/Fixtures"
       }
     },
     "ServerScriptService": {

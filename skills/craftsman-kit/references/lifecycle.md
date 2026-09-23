@@ -1,36 +1,48 @@
-# Lifecycle, Config & Cleanup: Component, Config, Keeper
+# Lifecycle, Config & Cleanup: Lifecycle, Config, Keeper
 
-## Component loader
+## Lifecycle loader
 
-`Craftsman.Component:LoadModulesAsync(folder) -> Promise<{ [name]: module }>` boots every singleton in the folder. Call it with **`:`**.
+The loader is its own package, **`averyark/craftsman-lifecycle`**. Install it next to Craftsman Kit and require it directly:
+
+```toml
+Lifecycle = { name = "averyark/craftsman-lifecycle", version = "^1.0.0", index = "wally" }
+```
+
+`Lifecycle:LoadModulesAsync(folder) -> Promise<{ [name]: module }>` boots every singleton in the folder. Call it with **`:`**.
+
+`Craftsman.Component` still returns the same module in 0.10.0, with a deprecation warning, and is removed in the next minor version. Never write new code against it.
 
 ### What the loader does
 
-1. **Require.** It requires every `ModuleScript` descendant of `folder`, skipping names that end in `.spec`. Each module is keyed by its `ModuleScript.Name`. A require error rejects the whole load.
-2. **Init.** It calls `Module:Init()` on every table module, and **every Init finishes before any Start begins**.
-   - An Init that errors is `warn`ed.
-   - That module's `Start` is skipped, and so is the `Start` of every module that depends on it.
-   - A yielding Init holds up the whole boot. Keep Init synchronous.
-3. **Keeper.** It injects a Keeper as `Module.Keeper`. If the module already has one, that Keeper is kept.
-4. **Dependency graph.** It builds the graph from `Module.Dependencies = { OtherModuleTable, ... }`.
+1. **Require.** It requires every `ModuleScript` under `folder`, concurrently, before anything runs.
+   - Names ending in `.spec` are skipped, and so is everything under an instance whose `CraftsmanLifecycleIgnore` attribute is `true`.
+   - Each module is keyed by its `ModuleScript.Name`. Two modules with the same name reject the load before anything is required.
+   - A module that errors while being required is reported, and only it and the modules depending on it are skipped.
+2. **Keeper.** It injects a Keeper as `Module.Keeper`. If the module already has one, that Keeper is kept.
+3. **Dependency graph.** It builds the graph from `Module.Dependencies = { OtherModuleTable, ... }`.
    - Entries are **module tables** (the value the dependency's `require` returned), not names.
    - Entries that aren't loaded modules, and self-references, are ignored with a warning.
-   - A cycle rejects the load with `Cyclic module dependency: A -> B -> A`.
+   - A cycle rejects the load before any `Init` runs.
+4. **Init.** It calls `Module:Init()` one module at a time, **each after every module it depends on**, and every Init finishes before any Start begins.
+   - An Init that errors is `warn`ed, and every module that depends on it skips both `Init` and `Start`.
+   - An Init that yields is reported. Keep Init synchronous.
 5. **Start.** It calls `Module:Start()` after all of that module's dependencies' `Start`s have **finished**.
    - Modules that don't depend on each other start concurrently.
-   - `Start` may yield, but yielding delays its dependents.
+   - A Start still running after `HangWarningSeconds` (10) is reported with the modules waiting on it.
 
-The promise resolves once every Start has settled. After that, `Component.IsLoaded` is `true` and `Component.LoadedModules[name]` holds each module.
+The promise resolves once every Start has settled. After that, `Lifecycle.IsLoaded` is `true` and `Lifecycle.LoadedModules[name]` holds each module. Loading a second folder into the same loader is fine: its modules can depend on the first folder's.
 
 ### Shutdown
 
-`Craftsman.Component:StopModulesAsync()` calls `Module:Stop()` in reverse dependency order, meaning dependents stop first. It destroys each module's Keeper *after* that module's `Stop` returns.
+`Lifecycle:StopModulesAsync()` calls `Module:Stop()` in reverse dependency order, meaning dependents stop first. It destroys each module's Keeper *after* that module's `Stop` returns, and it covers every folder the loader loaded.
 
 ### Other members
 
-`Component.new(tbl)` sets a metatable and adds a `Keeper` to a plain table. You rarely need it.
+`Lifecycle.new(tbl)` adds a `Keeper` to a plain table. You rarely need it.
 
-`Config.MODULE_LOAD_ORDER` is deprecated. Use `Dependencies` instead.
+`Lifecycle.Loader()` makes an independent loader. Use it in tests, so stopping fixtures does not stop the game.
+
+`Config.MODULE_LOAD_ORDER` does nothing. Use `Dependencies` instead.
 
 ### Singleton shape
 
@@ -85,10 +97,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Craftsman = require(ReplicatedStorage.Packages.Craftsman)
+local Lifecycle = require(ReplicatedStorage.Packages.Lifecycle)
 
 Craftsman.StateMachineServer:Start()
 
-Craftsman.Component:LoadModulesAsync(ServerScriptService.Services):await()
+Lifecycle:LoadModulesAsync(ServerScriptService.Services):await()
 
 local function track(player: Player)
 	player.CharacterAdded:Connect(function(character)
@@ -110,10 +123,11 @@ end
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Craftsman = require(ReplicatedStorage.Packages.Craftsman)
+local Lifecycle = require(ReplicatedStorage.Packages.Lifecycle)
 
 Craftsman.StateMachineClient:Start()
 
-Craftsman.Component:LoadModulesAsync(ReplicatedStorage.Controllers):await()
+Lifecycle:LoadModulesAsync(ReplicatedStorage.Controllers):await()
 ```
 
 The StateMachine hosts **must** be started explicitly. The `AUTO_START_*` settings only permit starting; they don't start anything themselves.
@@ -215,5 +229,5 @@ end
   - Listeners connect in `Start`.
   - Every Craftsman event (`Entity.Died`, `InputUtil.Began`, `Queue.Succeeded`, …) is a Signal: use `:Connect`, `:Once` and `:Wait` on it.
 - **`Promise`** is typed-promise (evaera API): `Promise.new`, `.try`, `.all`, `:andThen`, `:catch`, `:await` and `:expect`.
-  - `LoadModulesAsync`, `Queue:Enqueue`, `Queue:Drain`, `Pathfind:GotoAsync` and `Pathfind:ComputePathToAsync` all return promises.
+  - `Lifecycle:LoadModulesAsync`, `Queue:Enqueue`, `Queue:Drain`, `Pathfind:GotoAsync` and `Pathfind:ComputePathToAsync` all return promises.
   - Always `:catch` a rejection you don't propagate, or Promise warns about it.

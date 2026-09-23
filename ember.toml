@@ -1,6 +1,6 @@
 [package]
 name = "averyark/craftsman-kit"
-version = "0.9.0"
+version = "0.10.0"
 description = "Craftsman Kit: entities, tags, state machines, pathfinding, task control and utilities for Roblox Luau."
 authors = ["averyark"]
 repository = "averyark/craftsman-kit"
@@ -36,4 +36,5 @@ Promise = { name = "howmanysmall/typed-promise", version = "^4.0.6", index = "wa
 ByteNet = { name = "elitriare/bytenet-max", version = "^0.2.7", index = "wally" }
 Signal = { name = "sleitnick/signal", version = "^2.0.3", index = "wally" }
 Keeper = { name = "averyark/keeper", version = "^1.10.2", index = "wally" }
+Lifecycle = { name = "averyark/craftsman-lifecycle", version = "^1.0.0", index = "wally" }
 

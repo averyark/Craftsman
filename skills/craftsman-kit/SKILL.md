@@ -1,9 +1,9 @@
 ---
 name: craftsman-kit
-description: Use when writing or reviewing Roblox Luau code in a project that depends on the Craftsman framework (averyark/craftsman-kit), or when the user mentions Craftsman or one of its modules (Component, Entity, Tag, StateMachine, Queue, Debounce, Concurrency, Pathfind, Spring, TweenUtil, SoundUtil, AnimationUtil, InputUtil, TouchUtil, InterfaceUtil, WorldUtil, MathUtil, StringUtil, TableUtil, PrintUtil, Inspect). Explains how to bootstrap the game and which Craftsman utility to reach for, and gives exact call signatures, call syntax and gotchas so the agent does not hand-roll what the framework already provides.
+description: Use when writing or reviewing Roblox Luau code in a project that depends on the Craftsman framework (averyark/craftsman-kit), or when the user mentions Craftsman or one of its modules (Lifecycle, formerly Component, Entity, Tag, StateMachine, Queue, Debounce, Concurrency, Pathfind, Spring, TweenUtil, SoundUtil, AnimationUtil, InputUtil, TouchUtil, InterfaceUtil, WorldUtil, MathUtil, StringUtil, TableUtil, PrintUtil, Inspect). Explains how to bootstrap the game and which Craftsman utility to reach for, and gives exact call signatures, call syntax and gotchas so the agent does not hand-roll what the framework already provides.
 license: MIT
 metadata:
-  framework-version: "0.9.0"
+  framework-version: "0.10.0"
 ---
 
 # Craftsman
@@ -35,14 +35,15 @@ Install with Ember from the Wally index (`ember.toml`). The Wally CLI cannot ins
 wally = "https://github.com/UpliftGames/wally-index"
 
 [dependencies]
-Craftsman = { name = "averyark/craftsman-kit", version = "^0.9.0", index = "wally" }
+Craftsman = { name = "averyark/craftsman-kit", version = "^0.10.0", index = "wally" }
+Lifecycle = { name = "averyark/craftsman-lifecycle", version = "^1.0.0", index = "wally" }
 ```
 
 ## Pick the right module
 
 | Need | Use | Reference |
 |---|---|---|
-| Boot services/controllers, order startup, clean up on shutdown | `Component:LoadModulesAsync(folder)` with `Init`/`Start`/`Stop` + `Dependencies` | [lifecycle](references/lifecycle.md) |
+| Boot services/controllers, order startup, clean up on shutdown | `Lifecycle:LoadModulesAsync(folder)` (averyark/craftsman-lifecycle) with `Init`/`Start`/`Stop` + `Dependencies` | [lifecycle](references/lifecycle.md) |
 | Framework settings (UI scale, touch, state machine) | `ReplicatedStorage.CraftsmanConfig` or `Config.Configure` | [lifecycle](references/lifecycle.md) |
 | Clean up connections, instances, threads | the owning object's `Keeper` | [lifecycle](references/lifecycle.md) |
 | Character/NPC states (idle, attacking, stunned…), optionally replicated | `State` + `Machine` (+ `StateMachine.Register`) | [state](references/state.md) |
@@ -87,7 +88,7 @@ Read the linked reference before using a module for the first time in a task. Th
 
    | Call with | Functions |
    |---|---|
-   | `:` | every `WorldUtil` function, `InterfaceUtil:AutoScale`, `PrintUtil`, `Component:LoadModulesAsync`, `StateMachineServer:Start` / `StateMachineClient:Start`, and methods on instances (`queue:Enqueue`, `tag:Add`, `machine:Transition`, `animate:Play`…) |
+   | `:` | every `WorldUtil` function, `InterfaceUtil:AutoScale`, `PrintUtil`, `Lifecycle:LoadModulesAsync`, `StateMachineServer:Start` / `StateMachineClient:Start`, and methods on instances (`queue:Enqueue`, `tag:Add`, `machine:Transition`, `animate:Play`…) |
    | `.` | constructors and module functions: `Tag.Get`, `Entity.Get`, `TweenUtil.Play`, `SoundUtil.QuickPlay`, `InputUtil.BindAction`, `TouchUtil.Button`, `InterfaceUtil.ComputeScale`, `MathUtil.*`, `StringUtil.*`, `TableUtil.*` |
 
 5. **Replication has fixed entry points.** Anything else gets built by hand.
@@ -101,11 +102,12 @@ Read the linked reference before using a module for the first time in a task. Th
 ```
 ReplicatedStorage/
   Packages/Craftsman
+  Packages/Lifecycle
   CraftsmanConfig          -- optional ModuleScript returning config overrides
-  Controllers/             -- client singletons, loaded by Component
+  Controllers/             -- client singletons, loaded by Lifecycle
 ServerScriptService/
   Bootstrap.server.luau
-  Services/                -- server singletons, loaded by Component
+  Services/                -- server singletons, loaded by Lifecycle
 StarterPlayerScripts/
   Bootstrap.client.luau
 ```
@@ -114,12 +116,12 @@ Put only singletons in `Services/` and `Controllers/`. The loader requires every
 
 **Server**
 1. `StateMachineServer:Start()`
-2. `Component:LoadModulesAsync(Services):await()`
+2. `Lifecycle:LoadModulesAsync(Services):await()`
 3. Wrap characters in entities.
 
 **Client**
 1. `StateMachineClient:Start()`
-2. `Component:LoadModulesAsync(Controllers):await()`
+2. `Lifecycle:LoadModulesAsync(Controllers):await()`
 
 Full bootstrap code is in [lifecycle](references/lifecycle.md).
 

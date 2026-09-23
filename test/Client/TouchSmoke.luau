@@ -5,7 +5,7 @@
     Contact     > Twitter: https://twitter.com/averyark_
     Created     > 03/08/2026
 
-    Client half of the touch-button smoke test. Picked up by Component:LoadModulesAsync, so it
+    Client half of the touch-button smoke test. Picked up by Lifecycle:LoadModulesAsync, so it
     runs during a normal boot with a real PlayerGui.
 --]]
 
