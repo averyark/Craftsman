@@ -5,6 +5,25 @@ version, as `0.7.0` did.
 
 ---
 
+## Renamed to Craftsman Kit
+
+The package is now `averyark/craftsman-kit`, and the repository is `averyark/craftsman-kit`.
+The code is unchanged. `averyark/craftsman` stays on the Wally index at 0.9.0 and receives no
+further versions.
+
+To move, change the package name and keep the dependency named `Craftsman`, so every
+`Craftsman.*` call keeps working:
+
+```toml
+[dependencies]
+Craftsman = { name = "averyark/craftsman-kit", version = "^0.9.0", index = "wally" }
+```
+
+The agent skill moves with the repository: `/plugin marketplace add averyark/craftsman-kit`
+and `npx skills add averyark/craftsman-kit`. The plugin itself is still `craftsman@craftsman`.
+
+---
+
 ## 0.9.0
 
 Craftsman is now a smaller package. It ships on Ember instead of Wally. It no longer persists

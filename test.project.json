@@ -1,5 +1,5 @@
 {
-  "name": "craftsman",
+  "name": "craftsman-kit",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {

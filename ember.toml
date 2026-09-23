@@ -1,9 +1,9 @@
 [package]
-name = "averyark/craftsman"
+name = "averyark/craftsman-kit"
 version = "0.9.0"
-description = "Craftsman is a proprietary roblox scripting framework and scripting kit."
+description = "Craftsman Kit: entities, tags, state machines, pathfinding, task control and utilities for Roblox Luau."
 authors = ["averyark"]
-repository = "averyark/Craftsman"
+repository = "averyark/craftsman-kit"
 license = "MIT"
 
 [target]

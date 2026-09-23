@@ -1,6 +1,6 @@
 ---
 name: craftsman
-description: Use when writing or reviewing Roblox Luau code in a project that depends on the Craftsman framework (averyark/craftsman), or when the user mentions Craftsman or one of its modules (Component, Entity, Tag, StateMachine, Queue, Debounce, Concurrency, Pathfind, Spring, TweenUtil, SoundUtil, AnimationUtil, InputUtil, TouchUtil, InterfaceUtil, WorldUtil, MathUtil, StringUtil, TableUtil, PrintUtil, Inspect). Explains how to bootstrap the game and which Craftsman utility to reach for, and gives exact call signatures, call syntax and gotchas so the agent does not hand-roll what the framework already provides.
+description: Use when writing or reviewing Roblox Luau code in a project that depends on the Craftsman framework (averyark/craftsman-kit), or when the user mentions Craftsman or one of its modules (Component, Entity, Tag, StateMachine, Queue, Debounce, Concurrency, Pathfind, Spring, TweenUtil, SoundUtil, AnimationUtil, InputUtil, TouchUtil, InterfaceUtil, WorldUtil, MathUtil, StringUtil, TableUtil, PrintUtil, Inspect). Explains how to bootstrap the game and which Craftsman utility to reach for, and gives exact call signatures, call syntax and gotchas so the agent does not hand-roll what the framework already provides.
 license: MIT
 metadata:
   framework-version: "0.9.0"
@@ -35,7 +35,7 @@ Install with Ember from the Wally index (`ember.toml`). The Wally CLI cannot ins
 wally = "https://github.com/UpliftGames/wally-index"
 
 [dependencies]
-Craftsman = { name = "averyark/craftsman", version = "^0.9.0", index = "wally" }
+Craftsman = { name = "averyark/craftsman-kit", version = "^0.9.0", index = "wally" }
 ```
 
 ## Pick the right module
