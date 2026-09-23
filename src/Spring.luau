@@ -658,7 +658,7 @@ local typeMetadata = {
 			}
 		end,
 
-		fromIntermediate = function(value: {})
+		fromIntermediate = function(value: {number})
 			return ColorSequence.new(
 				luvToRgb{value[1], value[2], value[3]},
 				luvToRgb{value[4], value[5], value[6]}
@@ -676,7 +676,7 @@ local typeMetadata = {
 type PropertyOverride = {
 	[string]: {
 		class: string,
-		get: (any)->(),
+		get: (any)->any,
 		set: (any, any)->(),
 	}
 }

@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > CraftsmanConfig.luau
     Author      > AveryArk
@@ -6,36 +6,8 @@
     Created     > 23/05/2026
 --]]
 
-const gt = require(game.ReplicatedStorage.Packages.gt)
-
-local KEYS = {
-	-- Products
-
-	-- Gamepasses
-}
-
-local PRODUCTS = {
-}
-
-local GAMEPASSES = {
-}
-
-local TEMPLATE = {
-
-}
-
-local SCHEMA = gt.build(gt.table({
-
-}))
-
 return {
-	MARKET = {
-		KEYS = KEYS,
-		PRODUCTS = PRODUCTS,
-		GAMEPASSES = GAMEPASSES,
-	},
-	DATA = {
-		TEMPLATE = TEMPLATE,
-		SCHEMA = SCHEMA,
+	INTERFACE = {
+		TEN_FOOT_BOOST = 1.5,
 	},
 }

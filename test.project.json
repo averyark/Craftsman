@@ -5,18 +5,11 @@
     "ReplicatedStorage": {
       "Packages": {
         "$className": "Folder",
-        "$path": "Packages",
-        "_TestIndex": {
-          "$path": "Packages/_Index",
-          "averyark_craftsman@dev": {
-            "$className": "Folder",
-            "Craftsman": {
-              "$path": "src"
-            }
-          }
-        },
         "Craftsman": {
-          "$path": "index.luau"
+          "$path": "src"
+        },
+        "packages": {
+          "$path": "packages"
         }
       },
       "CraftsmanConfig": {

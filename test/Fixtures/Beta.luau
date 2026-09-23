@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Beta.luau
     Author      > AveryArk

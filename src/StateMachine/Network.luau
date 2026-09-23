@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Network.luau
     Author      > AveryArk
@@ -6,26 +6,41 @@
     Created     > 30/05/2026
 --]]
 
-const ByteNet = require("../../../../ByteNet")
+const ByteNet = require("../../packages/roblox/ByteNet")
 
-const Network = ByteNet.defineNamespace("CraftsmanStateMachine", function()
+--
+export type MachinePayload = {
+	Id: string,
+	State: string?,
+	Running: boolean,
+	ClientAuthoritative: boolean,
+	Context: any,
+	Sequence: number?,
+}
+--
+
+local function define()
 	return {
 		structs = {},
 		packets = {
 			MachineUpdated = ByteNet.definePacket({
-				value = ByteNet.auto,
+				value = ByteNet.auto :: MachinePayload,
 			}),
 			ClientMachineUpdated = ByteNet.definePacket({
-				value = ByteNet.auto,
+				value = ByteNet.auto :: unknown,
 			}),
 		},
 		queries = {
 			RequestState = ByteNet.defineQuery({
-				request = ByteNet.auto,
-				response = ByteNet.auto,
+				request = ByteNet.auto :: unknown,
+				response = ByteNet.auto :: MachinePayload?,
 			}),
 		},
 	}
-end)
+end
 
-return Network
+--
+export type Network = typeof(define())
+--
+
+return ByteNet.defineNamespace("CraftsmanStateMachine", define :: any) :: Network

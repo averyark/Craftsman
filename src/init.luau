@@ -1,6 +1,8 @@
---!nonstrict
+--!strict
+
 const RunService = game:GetService("RunService")
 
+--
 export type Craftsman = {
 	Component: typeof(require("@self/Component")),
 	Debounce: typeof(require("@self/Debounce")),
@@ -13,16 +15,9 @@ export type Craftsman = {
 
 	Entity: typeof(require("@self/Entity")),
 
-	DataServer: typeof(require("@self/Data/Server")),
-	DataClient: typeof(require("@self/Data/Client")),
-	MarketServer: typeof(require("@self/Market/Server")),
-	MarketClient: typeof(require("@self/Market/Client")),
 	StateMachine: typeof(require("@self/StateMachine")),
 	StateMachineServer: typeof(require("@self/StateMachine/Server")),
 	StateMachineClient: typeof(require("@self/StateMachine/Client")),
-
-	StoreServer: typeof(require("@self/Store/Server")),
-	StoreClient: typeof(require("@self/Store/Client")),
 
 	InputUtil: typeof(require("@self/Utilities/InputUtil")),
 	TouchUtil: typeof(require("@self/Utilities/TouchUtil")),
@@ -38,12 +33,14 @@ export type Craftsman = {
 
 	MathUtil: typeof(require("@self/Utilities/MathUtil")),
 	StringUtil: typeof(require("@self/Utilities/StringUtil")),
+	Inspect: typeof(require("@self/Inspect")),
 
 	Config: typeof(require("@self/Config")),
-	Store: typeof(require("@self/Store")),
 }
+--
 
-local loaders: { [string]: () -> any } = {
+--
+const loaders: { [string]: () -> any } = {
 	Component = function()
 		return require("@self/Component")
 	end,
@@ -73,18 +70,6 @@ local loaders: { [string]: () -> any } = {
 		return require("@self/Entity")
 	end,
 
-	DataServer = function()
-		return require("@self/Data/Server")
-	end,
-	DataClient = function()
-		return require("@self/Data/Client")
-	end,
-	MarketServer = function()
-		return require("@self/Market/Server")
-	end,
-	MarketClient = function()
-		return require("@self/Market/Client")
-	end,
 	StateMachine = function()
 		return require("@self/StateMachine")
 	end,
@@ -93,13 +78,6 @@ local loaders: { [string]: () -> any } = {
 	end,
 	StateMachineClient = function()
 		return require("@self/StateMachine/Client")
-	end,
-
-	StoreServer = function()
-		return require("@self/Store/Server")
-	end,
-	StoreClient = function()
-		return require("@self/Store/Client")
 	end,
 
 	InterfaceUtil = function()
@@ -140,27 +118,29 @@ local loaders: { [string]: () -> any } = {
 	StringUtil = function()
 		return require("@self/Utilities/StringUtil")
 	end,
+	Inspect = function()
+		return require("@self/Inspect")
+	end,
 
 	Config = function()
 		return require("@self/Config")
 	end,
-	Store = function()
-		return require("@self/Store")
-	end,
 }
+--
 
-local SERVER_ONLY = {
-	DataServer = true,
-	MarketServer = true,
+--
+const SERVER_ONLY = {
 	StateMachineServer = true,
-	StoreServer = true,
 }
 
-local IS_SERVER = RunService:IsServer()
+const IS_SERVER = RunService:IsServer()
+--
 
 local Craftsman = setmetatable({}, {
 	__index = function(self, key)
-		local loader = loaders[key]
+		--
+		const loader = loaders[key]
+
 		if loader == nil then
 			return nil
 		end
@@ -168,9 +148,13 @@ local Craftsman = setmetatable({}, {
 		if SERVER_ONLY[key] and not IS_SERVER then
 			return nil
 		end
+		--
 
-		local module = loader()
+		--
+		const module = loader()
 		rawset(self, key, module)
+		--
+
 		return module
 	end,
 })

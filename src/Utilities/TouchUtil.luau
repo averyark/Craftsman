@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > TouchUtil.luau
     Author      > AveryArk
@@ -10,13 +10,11 @@ const Players = game:GetService("Players")
 const RunService = game:GetService("RunService")
 const UserInputService = game:GetService("UserInputService")
 
-const Keeper = require("../../../../Keeper")
+const Keeper = require("../../packages/roblox/Keeper")
 const Config = require("../Config")
-const Signal = require("../Signal")
-const InputStore = require("../Store/InputStore")
+const Signal = require("../../packages/roblox/Signal")
 const InputUtil = require("./InputUtil")
 const InterfaceUtil = require("./InterfaceUtil")
-const PrintUtil = require("./PrintUtil")
 
 --[=[
 	@class TouchUtil
@@ -52,9 +50,9 @@ const PrintUtil = require("./PrintUtil")
 	TouchUtil.SetEditMode(true)
 	```
 ]=]
---
 local TouchUtilModule = {}
 
+--
 export type Zone =
 	"TopLeft"
 	| "Top"
@@ -89,7 +87,6 @@ export type ButtonOptions = {
 	MaxSize: number?,
 }
 
---
 export type LayoutEntry = {
 	Position: { X: number, Y: number }?,
 	Scale: number?,
@@ -99,7 +96,40 @@ export type Layout = {
 	Version: number,
 	Entries: { [string]: LayoutEntry },
 }
+--
 
+--
+type DeviceSet = { [InputUtil.DeviceType]: boolean }
+
+type DragKind = "Move" | "Resize"
+
+type Drag = {
+	button: TouchButton,
+	kind: DragKind,
+	started: boolean,
+	origin_input: Vector2,
+	origin_position: Vector2,
+	origin_size: number,
+}
+
+type LayoutDefault = {
+	Zone: Zone?,
+	Order: number,
+	Position: UDim2?,
+	Size: number,
+}
+
+type PlayerControls = {
+	Enable: (self: PlayerControls) -> (),
+	Disable: (self: PlayerControls) -> (),
+}
+
+type PlayerModule = {
+	GetControls: (self: PlayerModule) -> PlayerControls?,
+}
+--
+
+--
 const TouchConfig = Config.TOUCH
 
 const ZONE_LAYOUTS: { [Zone]: { anchor: Vector2, scale: Vector2, horizontal: Enum.HorizontalAlignment } } = {
@@ -136,85 +166,150 @@ const DRAG_INPUT_TYPES: { [Enum.UserInputType]: boolean } = {
 	[Enum.UserInputType.MouseMovement] = true,
 }
 
-const DEFAULT_SHOW_ON: { [string]: boolean } = table.freeze({ Touch = true })
+const DEFAULT_SHOW_ON: DeviceSet = table.freeze({ Touch = true } :: DeviceSet)
 const CENTRE_ANCHOR = Vector2.new(0.5, 0.5)
+--
 
+--
 local Root = nil :: ScreenGui?
 local RootScale = nil :: UIScale?
-local RootKeeper = nil :: any
+local RootKeeper = nil :: Keeper.Keeper?
 local ZoneNextOrder: { [Zone]: number } = {}
 local ZoneOffsets: { [Zone]: Vector2 } = {}
 local PlayerGuiRef = nil :: Instance?
-local ControlsKeeper = nil :: any
-local AdoptedJump = nil :: any
+local _ControlsKeeper = nil :: Keeper.Keeper?
+local AdoptedJump = nil :: TouchButton?
 local DefaultSize = nil :: number?
-local Buttons: { [any]: boolean } = {}
-local ButtonsByLayoutId: { [string]: any } = {}
+
+local Buttons: { [TouchButton]: boolean } = {}
+local ButtonsByLayoutId: { [string]: TouchButton } = {}
 local Contexts: { [string]: boolean } = {}
-local ButtonsByContext: { [string]: { [any]: boolean } } = {}
-local Drags: { [any]: any } = {}
-local Claims: { [any]: any } = {}
-local MouseDrag = nil :: any
+local ButtonsByContext: { [string]: { [TouchButton]: boolean } } = {}
+local Drags: { [InputObject]: Drag } = {}
+local Claims: { [InputObject]: TouchButton } = {}
+
+local MouseDrag = nil :: Drag?
 local DeviceType: InputUtil.DeviceType = "KeyboardMouse"
 local EditMode = false
 local Grid = nil :: number?
+--
 
+--
 --[=[
 	@prop ContextChanged Signal -- Fired with (context, state, previous) whenever a context flips.
 	@within TouchUtil
 ]=]
---
-TouchUtilModule.ContextChanged = Signal.new()
+TouchUtilModule.ContextChanged = Signal.new() :: Signal.Signal<string, boolean, boolean>
 
 --[=[
 	@prop EditModeChanged Signal -- Fired with the new edit-mode state.
 	@within TouchUtil
 ]=]
---
-TouchUtilModule.EditModeChanged = Signal.new()
+TouchUtilModule.EditModeChanged = Signal.new() :: Signal.Signal<boolean>
 
 --[=[
 	@prop LayoutChanged Signal -- Fired with (layout_id, entry) when a drag or resize settles.
 	@within TouchUtil
 ]=]
+TouchUtilModule.LayoutChanged = Signal.new() :: Signal.Signal<string, LayoutEntry>
 --
-TouchUtilModule.LayoutChanged = Signal.new()
 
---
 local function assert_client(method_name: string)
+	--
 	if not RunService:IsServer() then
 		return
 	end
+	--
 
-	PrintUtil:Error(`TouchUtil.{method_name} is client-only; there is no PlayerGui on the server.`, 3)
+	error(`TouchUtil.{method_name} is client-only; there is no PlayerGui on the server.`, 3)
 end
 
 local function assert_zone(zone: Zone, method_name: string)
+	--
 	if ZONE_LAYOUTS[zone] then
 		return
 	end
+	--
 
-	PrintUtil:Error(`TouchUtil.{method_name}: "{tostring(zone)}" is not a zone.`, 3)
+	error(`TouchUtil.{method_name}: "{tostring(zone)}" is not a zone.`, 3)
 end
 
 local function get_scale_factor(): number
+	--
 	if RootScale then
 		return RootScale.Scale
 	end
+	--
 
 	return 1
 end
 
-local function input_position(input_object: any): Vector2
+local function input_position(input_object: InputObject): Vector2
 	return Vector2.new(input_object.Position.X, input_object.Position.Y)
 end
---
 
+--
 local TouchButton = {}
 TouchButton.__index = TouchButton
+--
 
 --
-local function claim_input(self: any, input_object: any): boolean
+type TouchButtonFields = {
+	Action: string,
+	Zone: Zone?,
+	Icon: string,
+	Text: string?,
+	Enabled: boolean,
+	IsNormalImage: boolean,
+	IsAdopted: boolean?,
+	IsCustomised: boolean,
+	LayoutId: string,
+	Movable: boolean,
+	Resizable: boolean,
+	MinSize: number,
+	MaxSize: number,
+	Order: number,
+	Position: UDim2?,
+	Overlay: string?,
+	Instance: GuiObject,
+	Keeper: Keeper.Keeper,
+	Pressed: Signal.Signal<InputObject>,
+	Released: Signal.Signal<InputObject?>,
+	Moved: Signal.Signal<UDim2?>,
+	Resized: Signal.Signal<number>,
+	_Pressed: boolean,
+	_PressInput: InputObject?,
+	_DragInput: InputObject?,
+	_HandleInput: InputObject?,
+	_EditApplied: boolean,
+	_Visible: boolean,
+	_VisibleWhen: { [string]: boolean },
+	_ShowOn: DeviceSet,
+	_BaseSize: number,
+	_LayoutSize: number,
+	_LayoutPosition: Vector2?,
+	_Scale: UIScale,
+	_SinkDefault: boolean,
+	_Label: TextLabel?,
+	_Overlay: ImageLabel?,
+	_OverlayTransparency: number,
+	_OverlayScale: number,
+	_OverlayOffset: number,
+	_Default: LayoutDefault,
+	_Outline: UIStroke?,
+	_Handle: ImageButton?,
+	_Real: GuiObject?,
+	_Proxy: GuiObject?,
+	_ProxyKeeper: Keeper.Keeper?,
+	_JumpCentre: Vector2?,
+	_JumpScale: number?,
+}
+
+export type TouchButton = setmetatable<TouchButtonFields, typeof(TouchButton)>
+--
+
+local function claim_input(self: TouchButton, input_object: InputObject?): boolean
+	--
 	if input_object == nil then
 		return true
 	end
@@ -222,20 +317,29 @@ local function claim_input(self: any, input_object: any): boolean
 	if Claims[input_object] ~= nil then
 		return false
 	end
+	--
 
+	--
 	Claims[input_object] = self
+	--
+
 	return true
 end
 
-local function release_claim(input_object: any)
+local function release_claim(input_object: InputObject?)
+	--
 	if input_object == nil then
 		return
 	end
+	--
 
+	--
 	Claims[input_object] = nil
+	--
 end
 
-local function overlay_transparency(self: any): number
+local function overlay_transparency(self: TouchButton): number
+	--
 	if not self.Enabled then
 		return TouchConfig.DISABLED_TRANSPARENCY
 	end
@@ -243,24 +347,44 @@ local function overlay_transparency(self: any): number
 	if self._Pressed then
 		return math.clamp(self._OverlayTransparency - TouchConfig.OVERLAY_PRESS_DELTA, 0, 1)
 	end
+	--
 
 	return self._OverlayTransparency
 end
 
-local function refresh_overlay(self: any)
+local function refresh_overlay(self: TouchButton)
+	--
 	if not self._Overlay then
 		return
 	end
+	--
 
+	--
 	self._Overlay.ImageTransparency = overlay_transparency(self)
+	--
 end
 
-local function ensure_overlay(self: any): ImageLabel
+local function hide_overlay(self: TouchButton)
+	--
+	if not self._Overlay then
+		return
+	end
+	--
+
+	--
+	self._Overlay.Visible = false
+	--
+end
+
+local function ensure_overlay(self: TouchButton): ImageLabel
+	--
 	if self._Overlay then
 		return self._Overlay
 	end
+	--
 
-	local overlay = Instance.new("ImageLabel")
+	--
+	const overlay = Instance.new("ImageLabel")
 	overlay.Name = "Overlay"
 	overlay.BackgroundTransparency = 1
 	overlay.BorderSizePixel = 0
@@ -273,12 +397,13 @@ local function ensure_overlay(self: any): ImageLabel
 	overlay.Parent = self.Instance
 
 	self._Overlay = self.Keeper:Add(overlay)
+	--
+
 	return overlay
 end
---
 
---
-local function press(self: any, input_object: InputObject)
+local function press(self: TouchButton, input_object: InputObject)
+	--
 	if self._Pressed then
 		return
 	end
@@ -286,12 +411,16 @@ local function press(self: any, input_object: InputObject)
 	if not claim_input(self, input_object) then
 		return
 	end
+	--
 
+	--
 	self._Pressed = true
 	self._PressInput = input_object
+	--
 
+	--
 	if not self.IsNormalImage then
-		self.Instance.ImageRectOffset = TouchConfig.RECT_OFFSET_PRESSED
+		(self.Instance :: ImageButton).ImageRectOffset = TouchConfig.RECT_OFFSET_PRESSED
 	end
 
 	if self._Label then
@@ -299,26 +428,34 @@ local function press(self: any, input_object: InputObject)
 	end
 
 	refresh_overlay(self)
+	--
 
+	--
 	if not self.IsAdopted then
 		InputUtil.SetActionState(self.Action, true, self, input_object)
 	end
+	--
 
 	self.Pressed:Fire(input_object)
 end
 
-local function release(self: any, input_object: any)
+local function release(self: TouchButton, input_object: InputObject?)
+	--
 	if not self._Pressed then
 		return
 	end
+	--
 
+	--
 	release_claim(self._PressInput)
 
 	self._Pressed = false
 	self._PressInput = nil
+	--
 
+	--
 	if not self.IsNormalImage then
-		self.Instance.ImageRectOffset = TouchConfig.RECT_OFFSET_IDLE
+		(self.Instance :: ImageButton).ImageRectOffset = TouchConfig.RECT_OFFSET_IDLE
 	end
 
 	if self._Label then
@@ -326,26 +463,43 @@ local function release(self: any, input_object: any)
 	end
 
 	refresh_overlay(self)
+	--
 
+	--
 	if not self.IsAdopted then
 		InputUtil.SetActionState(self.Action, false, self, input_object)
 	end
+	--
 
 	self.Released:Fire(input_object)
 end
---
 
---
-local function index_contexts(self: any, previous: { [string]: boolean }?)
-	if previous then
-		for context in previous do
-			local set = ButtonsByContext[context]
-			if set then
-				set[self] = nil
-			end
-		end
+local function unindex_contexts(self: TouchButton, previous: { [string]: boolean }?)
+	--
+	if not previous then
+		return
 	end
+	--
 
+	--
+	for context in previous do
+		const set = ButtonsByContext[context]
+
+		if not set then
+			continue
+		end
+
+		set[self] = nil
+	end
+	--
+end
+
+local function index_contexts(self: TouchButton, previous: { [string]: boolean }?)
+	--
+	unindex_contexts(self, previous)
+	--
+
+	--
 	for context in self._VisibleWhen do
 		local set = ButtonsByContext[context]
 
@@ -356,212 +510,284 @@ local function index_contexts(self: any, previous: { [string]: boolean }?)
 
 		set[self] = true
 	end
+	--
 end
 
-local function contexts_satisfied(self: any): boolean
+local function contexts_satisfied(self: TouchButton): boolean
+	--
 	for context, expected in self._VisibleWhen do
 		if (Contexts[context] == true) ~= expected then
 			return false
 		end
 	end
+	--
 
 	return true
 end
---
 
---
-local function apply_size(self: any, size: number): number
-	local clamped = math.clamp(size, self.MinSize, self.MaxSize)
-	local scale = clamped / self._BaseSize
+local function apply_size(self: TouchButton, size: number): number
+	--
+	const clamped = math.clamp(size, self.MinSize, self.MaxSize)
+	const scale = clamped / self._BaseSize
 
 	self._LayoutSize = clamped
 	self._Scale.Scale = scale
+	--
 
+	--
 	if self._Handle then
-		local handle = TouchConfig.HANDLE_SIZE / (if scale > 0 then scale else 1)
+		const handle = TouchConfig.HANDLE_SIZE / (if scale > 0 then scale else 1)
 		self._Handle.Size = UDim2.fromOffset(handle, handle)
 	end
+	--
 
 	return clamped
 end
 
---
 local function viewport_size(): Vector2
-	local camera = workspace.CurrentCamera
+	--
+	const camera = workspace.CurrentCamera
 
 	if camera and camera.ViewportSize.X > 0 then
 		return camera.ViewportSize
 	end
+	--
 
 	return Vector2.new(1, 1)
 end
 
-local function absolute_centre(instance: any): Vector2
+local function absolute_centre(instance: GuiBase2d): Vector2
 	return instance.AbsolutePosition + instance.AbsoluteSize / 2
 end
 
---
-local function apply_absolute_centre(instance: any, centre: Vector2)
-	local parent = instance.Parent
+local function apply_absolute_centre(instance: GuiObject, centre: Vector2)
+	--
+	const parent = instance.Parent :: GuiBase2d?
 
 	if parent == nil then
 		return
 	end
 
-	local size = parent.AbsoluteSize
+	const size = parent.AbsoluteSize
 
 	if size.X <= 0 or size.Y <= 0 then
 		return
 	end
+	--
 
-	local relative = centre - parent.AbsolutePosition
+	--
+	const relative = centre - parent.AbsolutePosition
 
 	instance.AnchorPoint = CENTRE_ANCHOR
 	instance.Position = UDim2.fromScale(relative.X / size.X, relative.Y / size.Y)
+	--
 end
 
-local function layout_container(self: any): any
+local function layout_container(self: TouchButton): GuiBase2d
+	--
 	if self.IsAdopted and self.Instance.Parent then
-		return self.Instance.Parent
+		return self.Instance.Parent :: GuiBase2d
 	end
+	--
 
-	return Root
+	return Root :: ScreenGui
 end
 
-local function current_centre_scale(self: any): Vector2
-	local container = layout_container(self)
-	local root_size = container.AbsoluteSize
-	local instance = self.Instance
-	local centre = instance.AbsolutePosition + instance.AbsoluteSize / 2 - container.AbsolutePosition
+local function current_centre_scale(self: TouchButton): Vector2
+	--
+	const container = layout_container(self)
+	const root_size = container.AbsoluteSize
+	const instance = self.Instance
+	const centre = instance.AbsolutePosition + instance.AbsoluteSize / 2 - container.AbsolutePosition
 
 	if root_size.X <= 0 or root_size.Y <= 0 then
 		return Vector2.new(0.5, 0.5)
 	end
+	--
 
 	return Vector2.new(centre.X / root_size.X, centre.Y / root_size.Y)
 end
 
-local function place_at_scale(self: any, position: Vector2)
-	local instance = self.Instance
+local function place_at_scale(self: TouchButton, position: Vector2)
+	--
+	const instance = self.Instance
+	const placed = UDim2.fromScale(position.X, position.Y)
 
 	self.Zone = nil
-	self.Position = UDim2.fromScale(position.X, position.Y)
+	self.Position = placed
 	self._LayoutPosition = position
 
 	instance.AnchorPoint = CENTRE_ANCHOR
-	instance.Position = self.Position
+	instance.Position = placed
+	--
 
-	if not self.IsAdopted then
-		instance.Parent = Root
+	--
+	if self.IsAdopted then
+		return
 	end
+	--
+
+	--
+	instance.Parent = Root
+	--
 end
 
-local function snap_and_clamp(self: any, position: Vector2): Vector2
-	local root_size = layout_container(self).AbsoluteSize
+local function snap_and_clamp(self: TouchButton, position: Vector2): Vector2
+	--
+	const root_size = layout_container(self).AbsoluteSize
 
 	if root_size.X <= 0 or root_size.Y <= 0 then
 		return position
 	end
+	--
 
+	--
 	local x = position.X
 	local y = position.Y
-	local grid = Grid or TouchConfig.EDIT_GRID
+	const grid = Grid or TouchConfig.EDIT_GRID
 
 	if grid > 0 then
-		local step = grid * get_scale_factor()
+		const step = grid * get_scale_factor()
 		x = math.round(x * root_size.X / step) * step / root_size.X
 		y = math.round(y * root_size.Y / step) * step / root_size.Y
 	end
+	--
 
-	local half = self.Instance.AbsoluteSize / 2
-	local half_x = math.min(half.X / root_size.X, 0.5)
-	local half_y = math.min(half.Y / root_size.Y, 0.5)
+	--
+	const half = self.Instance.AbsoluteSize / 2
+	const half_x = math.min(half.X / root_size.X, 0.5)
+	const half_y = math.min(half.Y / root_size.Y, 0.5)
+	--
 
 	return Vector2.new(math.clamp(x, half_x, 1 - half_x), math.clamp(y, half_y, 1 - half_y))
 end
---
 
---
-local function apply_move(drag: any, delta: Vector2)
-	local self = drag.button
-	local root_size = layout_container(self).AbsoluteSize
+local function apply_move(drag: Drag, delta: Vector2)
+	--
+	const self = drag.button
+	const root_size = layout_container(self).AbsoluteSize
 
 	if root_size.X <= 0 or root_size.Y <= 0 then
 		return
 	end
+	--
 
-	local moved = drag.origin_position + Vector2.new(delta.X / root_size.X, delta.Y / root_size.Y)
+	--
+	const moved = drag.origin_position + Vector2.new(delta.X / root_size.X, delta.Y / root_size.Y)
+	--
+
 	place_at_scale(self, snap_and_clamp(self, moved))
 end
 
-local function apply_resize(drag: any, delta: Vector2)
-	local self = drag.button
+local function apply_resize(drag: Drag, delta: Vector2)
 	--
-	local factor = get_scale_factor()
-	local growth = (-delta.X + delta.Y) / 2 / (if factor > 0 then factor else 1)
+	const self = drag.button
+	const factor = get_scale_factor()
+	const growth = (-delta.X + delta.Y) / 2 / (if factor > 0 then factor else 1)
+	--
 
+	--
 	apply_size(self, drag.origin_size + growth)
+	--
 
 	--
 	if self.Zone then
 		return
 	end
+	--
 
 	place_at_scale(self, snap_and_clamp(self, self._LayoutPosition or current_centre_scale(self)))
 end
 
-local function finish_drag(drag: any)
-	local self = drag.button
+local function apply_drag(drag: Drag, delta: Vector2)
+	--
+	if drag.kind == "Resize" then
+		apply_resize(drag, delta)
+		return
+	end
+	--
 
-	self._DragInput = nil
-	self.IsCustomised = true
+	apply_move(drag, delta)
+end
+
+local function fire_drag_signal(drag: Drag)
+	--
+	const self = drag.button
 
 	if drag.kind == "Resize" then
 		self.Resized:Fire(self._LayoutSize)
-	else
-		self.Moved:Fire(self.Position)
+		return
 	end
+	--
+
+	self.Moved:Fire(self.Position)
+end
+
+local function finish_drag(drag: Drag)
+	--
+	const self = drag.button
+
+	self._DragInput = nil
+	self.IsCustomised = true
+	--
+
+	--
+	fire_drag_signal(drag)
+	--
 
 	TouchUtilModule.LayoutChanged:Fire(self.LayoutId, self:GetLayout())
 end
 
-local function cancel_drags_for(self: any)
+local function cancel_drags_for(self: TouchButton)
+	--
 	for input_object, drag in Drags do
 		if drag.button ~= self then
 			continue
 		end
+
 		Drags[input_object] = nil
 		release_claim(input_object)
 	end
+	--
 
+	--
 	if MouseDrag and MouseDrag.button == self then
 		MouseDrag = nil
 	end
+	--
 
+	--
 	self._DragInput = nil
 	self._HandleInput = nil
+	--
 end
 
-local function end_drag(input_object: any)
-	local drag = Drags[input_object]
+local function end_drag(input_object: InputObject): Drag?
+	--
+	const drag = Drags[input_object]
 
 	if drag == nil then
 		return nil
 	end
+	--
 
+	--
 	Drags[input_object] = nil
 	release_claim(input_object)
+	--
 
+	--
 	if MouseDrag == drag then
 		MouseDrag = nil
 	end
+	--
 
 	return drag
 end
 
---
-local function find_drag(input_object: any): any
-	local drag = Drags[input_object]
+local function find_drag(input_object: InputObject): Drag?
+	--
+	const drag = Drags[input_object]
 
 	if drag then
 		return drag
@@ -570,11 +796,13 @@ local function find_drag(input_object: any): any
 	if input_object.UserInputType ~= Enum.UserInputType.MouseMovement then
 		return nil
 	end
+	--
 
 	return MouseDrag
 end
 
-local function begin_drag(self: any, input_object: any, kind: string)
+local function begin_drag(self: TouchButton, input_object: InputObject, kind: DragKind)
+	--
 	if self._DragInput then
 		return
 	end
@@ -582,10 +810,12 @@ local function begin_drag(self: any, input_object: any, kind: string)
 	if not claim_input(self, input_object) then
 		return
 	end
+	--
 
+	--
 	self._DragInput = input_object
 
-	local drag = {
+	const drag: Drag = {
 		button = self,
 		kind = kind,
 		started = false,
@@ -595,13 +825,21 @@ local function begin_drag(self: any, input_object: any, kind: string)
 	}
 
 	Drags[input_object] = drag
+	--
 
-	if input_object.UserInputType == Enum.UserInputType.MouseButton1 then
-		MouseDrag = drag
+	--
+	if input_object.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
 	end
+	--
+
+	--
+	MouseDrag = drag
+	--
 end
 
-local function begin_edit_drag(self: any, input_object: any): boolean
+local function begin_edit_drag(self: TouchButton, input_object: InputObject): boolean
+	--
 	if not PRESS_INPUT_TYPES[input_object.UserInputType] then
 		return false
 	end
@@ -613,41 +851,48 @@ local function begin_edit_drag(self: any, input_object: any): boolean
 	if input_object == self._HandleInput then
 		return false
 	end
+	--
 
+	--
 	begin_drag(self, input_object, "Move")
+	--
+
 	return true
 end
 
---
-
---
 local function set_default_controls(enabled: boolean)
-	local scripts = Players.LocalPlayer:FindFirstChild("PlayerScripts")
+	--
+	const scripts = Players.LocalPlayer:FindFirstChild("PlayerScripts")
 
 	if scripts == nil then
 		return
 	end
 
-	local module = scripts:FindFirstChild("PlayerModule")
+	const module = scripts:FindFirstChild("PlayerModule")
 
 	if module == nil then
 		return
 	end
+	--
 
-	local ok, controls = pcall(function()
-		return require(module):GetControls()
+	--
+	const ok, controls = pcall(function()
+		return (require(module) :: PlayerModule):GetControls()
 	end)
 
 	if not ok or controls == nil then
 		return
 	end
+	--
 
+	--
 	if enabled then
 		pcall(function()
 			controls:Enable()
 		end)
 		return
 	end
+	--
 
 	pcall(function()
 		controls:Disable()
@@ -655,33 +900,37 @@ local function set_default_controls(enabled: boolean)
 end
 
 local function find_default_jump(): ImageButton?
+	--
 	if PlayerGuiRef == nil then
 		return nil
 	end
 
-	local touch_gui = PlayerGuiRef:FindFirstChild("TouchGui")
+	const touch_gui = PlayerGuiRef:FindFirstChild("TouchGui")
 
 	if touch_gui == nil then
 		return nil
 	end
 
-	local controls = touch_gui:FindFirstChild("TouchControlFrame")
+	const controls = touch_gui:FindFirstChild("TouchControlFrame")
 
 	if controls == nil then
 		return nil
 	end
+	--
 
-	local jump = controls:FindFirstChild("JumpButton")
+	--
+	const jump = controls:FindFirstChild("JumpButton")
 
 	if jump and jump:IsA("ImageButton") then
 		return jump
 	end
+	--
 
 	return nil
 end
 
---
 local function resolve_default_size(): number
+	--
 	if DefaultSize then
 		return DefaultSize
 	end
@@ -689,44 +938,46 @@ local function resolve_default_size(): number
 	if not TouchConfig.MATCH_JUMP_SIZE then
 		return TouchConfig.DEFAULT_SIZE
 	end
+	--
 
-	local source = find_default_jump()
+	--
+	const source = find_default_jump()
 
 	if source == nil then
 		return TouchConfig.DEFAULT_SIZE
 	end
 
-	local measured = source.AbsoluteSize.Y / get_scale_factor()
+	const measured = source.AbsoluteSize.Y / get_scale_factor()
 
 	if measured <= 0 then
 		return TouchConfig.DEFAULT_SIZE
 	end
+	--
 
+	--
 	DefaultSize = measured
+	--
+
 	return measured
 end
 
---
-local function place_in_zone(self: any, zone: Zone)
-	local layout = ZONE_LAYOUTS[zone]
-	local margin = TouchConfig.ZONE_MARGIN
-	local offset = ZoneOffsets[zone] or Vector2.zero
-	local anchor_x = layout.scale.X
-	local anchor_y = layout.scale.Y
-	local step = resolve_default_size() + TouchConfig.ZONE_PADDING
-	local slot = self.Order * step
+local function place_in_zone(self: TouchButton, zone: Zone)
+	--
+	const layout = ZONE_LAYOUTS[zone]
+	const margin = TouchConfig.ZONE_MARGIN
+	const offset = ZoneOffsets[zone] or Vector2.zero
+	const anchor_x = layout.scale.X
+	const anchor_y = layout.scale.Y
+	const step = resolve_default_size() + TouchConfig.ZONE_PADDING
+	const slot = self.Order * step
 
-	local origin_x = margin - anchor_x * margin * 2 + offset.X
-	local origin_y = margin - anchor_y * margin * 2 + offset.Y
-	local item_anchor = anchor_x
-	local x
+	const origin_x = margin - anchor_x * margin * 2 + offset.X
+	const origin_y = margin - anchor_y * margin * 2 + offset.Y
+	const item_anchor = anchor_x
+	const x = if anchor_x == 1 then origin_x - slot else origin_x + slot
+	--
 
-	if anchor_x == 1 then
-		x = origin_x - slot
-	else
-		x = origin_x + slot
-	end
-
+	--
 	self.Zone = zone
 	self.Position = nil
 	self._LayoutPosition = nil
@@ -734,126 +985,323 @@ local function place_in_zone(self: any, zone: Zone)
 	self.Instance.AnchorPoint = Vector2.new(item_anchor, anchor_y)
 	self.Instance.Position = UDim2.new(anchor_x, x, anchor_y, origin_y)
 	self.Instance.Parent = Root
+	--
 end
 
 local function next_zone_order(zone: Zone): number
-	local order = ZoneNextOrder[zone] or 0
+	--
+	const order = ZoneNextOrder[zone] or 0
 	ZoneNextOrder[zone] = order + 1
+	--
+
 	return order
 end
 
 local function reposition_zone(zone: Zone)
+	--
 	for button in Buttons do
 		if button.Zone ~= zone then
 			continue
 		end
+
 		place_in_zone(button, zone)
 	end
+	--
 end
 
 local function get_root(): ScreenGui
+	--
 	if Root then
 		return Root
 	end
+	--
 
+	--
 	RootKeeper = Keeper.new()
-	ControlsKeeper = RootKeeper:Extend()
+	_ControlsKeeper = RootKeeper:Extend()
+	--
 
-	local screen_gui = Instance.new("ScreenGui")
+	--
+	const screen_gui = Instance.new("ScreenGui")
 	screen_gui.Name = "CraftsmanTouch"
 	screen_gui.DisplayOrder = TouchConfig.DISPLAY_ORDER
 	screen_gui.ResetOnSpawn = false
 	screen_gui.ClipToDeviceSafeArea = false
 	screen_gui.SafeAreaCompatibility = Enum.SafeAreaCompatibility.FullscreenExtension
 	screen_gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+
 	PlayerGuiRef = Players.LocalPlayer:WaitForChild("PlayerGui")
 	screen_gui.Parent = PlayerGuiRef
+	--
 
+	--
 	Root = screen_gui
 	RootKeeper:Add(screen_gui)
+	--
 
 	--
 	if TouchConfig.AUTO_SCALE then
-		RootKeeper:Add(InterfaceUtil:AutoScale(screen_gui))
+		RootKeeper:Add(InterfaceUtil:AutoScale(screen_gui) :: Keeper.Trackable)
 		RootScale = screen_gui:FindFirstChildOfClass("UIScale")
 	end
+	--
 
-	DeviceType = InputStore:getState().DeviceType
+	--
+	DeviceType = InputUtil.GetDeviceType()
+	--
 
+	--
 	RootKeeper:Connect(PlayerGuiRef.ChildAdded, function()
 		if AdoptedJump == nil or EditMode then
 			return
 		end
 
 		task.defer(function()
-			AdoptedJump:_ApplyAdoptedLayout()
+			(AdoptedJump :: TouchButton):_ApplyAdoptedLayout()
 		end)
 	end)
 
-	RootKeeper:Add(InputStore:subscribe(function(state)
-		return state.DeviceType
-	end, function(device: InputUtil.DeviceType)
+	RootKeeper:Connect(InputUtil.DeviceChanged, function(device: InputUtil.DeviceType)
 		DeviceType = device
 
 		for button in Buttons do
 			button:_Resolve()
 		end
-	end))
+	end)
+	--
 
 	RootKeeper:Connect(UserInputService.InputChanged, function(input_object: InputObject)
+		--
 		if not DRAG_INPUT_TYPES[input_object.UserInputType] then
 			return
 		end
 
-		local drag = find_drag(input_object)
+		const drag = find_drag(input_object)
 
 		if drag == nil then
 			return
 		end
+		--
 
-		local delta = input_position(input_object) - drag.origin_input
+		--
+		const delta = input_position(input_object) - drag.origin_input
 
-		if not drag.started then
-			if delta.Magnitude < TouchConfig.DRAG_THRESHOLD then
-				return
-			end
-			drag.started = true
+		if not drag.started and delta.Magnitude < TouchConfig.DRAG_THRESHOLD then
+			return
 		end
 
-		if drag.kind == "Resize" then
-			apply_resize(drag, delta)
-		else
-			apply_move(drag, delta)
-		end
+		drag.started = true
+		--
+
+		apply_drag(drag, delta)
 	end)
 
 	RootKeeper:Connect(UserInputService.InputEnded, function(input_object: InputObject)
-		local drag = end_drag(input_object)
+		--
+		const drag = end_drag(input_object)
 
 		if drag == nil then
 			return
 		end
+		--
 
+		--
 		drag.button._HandleInput = nil
 
 		if not drag.started then
 			drag.button._DragInput = nil
 			return
 		end
+		--
 
 		finish_drag(drag)
 	end)
 
 	return screen_gui
 end
---
 
-local function new(action_name: string, options: ButtonOptions?)
+local function resolve_show_on(show_on: { InputUtil.DeviceType }?): DeviceSet
+	--
+	if not show_on then
+		return DEFAULT_SHOW_ON
+	end
+	--
+
+	--
+	const allowed: DeviceSet = {}
+
+	for _, device in show_on do
+		allowed[device] = true
+	end
+	--
+
+	return allowed
+end
+
+local function create_button(self: TouchButton, given: ButtonOptions): GuiObject
+	--
+	if given.Adopt then
+		self.IsAdopted = true
+		self.IsNormalImage = true
+		return given.Adopt
+	end
+	--
+
+	--
+	const button = Instance.new("ImageButton")
+	button.BackgroundTransparency = 1
+	button.BorderSizePixel = 0
+	button.ScaleType = if self.IsNormalImage then Enum.ScaleType.Fit else Enum.ScaleType.Slice
+	button.Image = self.Icon
+	--
+
+	--
+	if self.IsNormalImage then
+		return button
+	end
+
+	button.ImageRectSize = TouchConfig.RECT_SIZE
+	button.ImageRectOffset = TouchConfig.RECT_OFFSET_IDLE
+	--
+
+	return button
+end
+
+local function configure_base(self: TouchButton, button: GuiObject, given: ButtonOptions, action_name: string)
+	--
+	if self.IsAdopted then
+		self._BaseSize = if button.AbsoluteSize.Y > 0 then button.AbsoluteSize.Y else TouchConfig.DEFAULT_SIZE
+		self.MinSize = given.MinSize or self._BaseSize * 0.6
+		self.MaxSize = given.MaxSize or self._BaseSize * 2
+		return
+	end
+	--
+
+	--
+	self._BaseSize = TouchConfig.BASE_SIZE
+	button.Name = action_name
+	button.Size = UDim2.fromOffset(TouchConfig.BASE_SIZE, TouchConfig.BASE_SIZE)
+	button.AnchorPoint = Vector2.zero
+	button.Active = given.Sink == true
+	button.Visible = false
+	--
+end
+
+local function place_initial(self: TouchButton, button: GuiObject, given: ButtonOptions, root: ScreenGui)
+	--
+	if self.IsAdopted then
+		self.Zone = nil
+		self.Position = button.Position
+		return
+	end
+
+	if given.Position then
+		self.Position = given.Position
+		self._LayoutPosition = Vector2.new(given.Position.X.Scale, given.Position.Y.Scale)
+		button.AnchorPoint = CENTRE_ANCHOR
+		button.Position = given.Position
+		button.Parent = root
+		return
+	end
+	--
+
+	--
+	const zone: Zone = self.Zone or "BottomRight"
+
+	if given.Order == nil then
+		self.Order = next_zone_order(zone)
+	end
+	--
+
+	place_in_zone(self, zone)
+end
+
+local function get_adopted_layout(self: TouchButton): LayoutEntry
+	--
+	const entry = { Scale = self._JumpScale or 1 } :: LayoutEntry
+
+	if self._JumpCentre then
+		entry.Position = { X = self._JumpCentre.X, Y = self._JumpCentre.Y }
+	end
+	--
+
+	return entry
+end
+
+local function apply_adopted_layout_entry(self: TouchButton, entry: LayoutEntry)
+	--
+	if type(entry.Scale) == "number" then
+		self._JumpScale = entry.Scale
+		self.IsCustomised = true
+	end
+	--
+
+	--
+	const centre = entry.Position
+
+	if type(centre) == "table" and type(centre.X) == "number" and type(centre.Y) == "number" then
+		self._JumpCentre = Vector2.new(centre.X, centre.Y)
+		self.IsCustomised = true
+	end
+	--
+
+	self:_ApplyAdoptedLayout()
+end
+
+local function restore_default_placement(self: TouchButton, default: LayoutDefault)
+	--
+	if default.Zone then
+		self:SetZone(default.Zone, default.Order)
+		return
+	end
+
+	if not default.Position then
+		return
+	end
+	--
+
+	self:SetPosition(default.Position)
+end
+
+local function reset_button_layout(layout_id: string)
+	--
+	const button = ButtonsByLayoutId[layout_id]
+
+	if not button then
+		return
+	end
+	--
+
+	button:ResetLayout()
+end
+
+local function resolve_context_buttons(context: string)
+	--
+	const affected = ButtonsByContext[context]
+
+	if not affected then
+		return
+	end
+	--
+
+	--
+	for button in affected do
+		button:_Resolve()
+	end
+	--
+end
+
+local function new(action_name: string, options: ButtonOptions?): TouchButton
+	--
 	assert_client("Button")
+	--
 
-	local given = options or {}
-	local self = setmetatable({}, TouchButton)
+	--
+	const given: ButtonOptions = options or {}
+	const self = setmetatable({} :: TouchButtonFields, TouchButton)
+	--
 
+	--
 	self.Action = action_name
 	self.Zone = given.Zone
 	self.Icon = given.Icon or TouchConfig.DEFAULT_ASSET
@@ -880,61 +1328,32 @@ local function new(action_name: string, options: ButtonOptions?)
 	self._EditApplied = false
 	self._Visible = true
 	self._VisibleWhen = table.clone(given.VisibleWhen or {})
-	self._ShowOn = DEFAULT_SHOW_ON
+	self._ShowOn = resolve_show_on(given.ShowOn)
+	--
 
-	if given.ShowOn then
-		local allowed = {}
-		for _, device in given.ShowOn do
-			allowed[device] = true
-		end
-		self._ShowOn = allowed
-	end
-
+	--
 	if ButtonsByLayoutId[self.LayoutId] then
-		PrintUtil:Warn(
+		warn(
 			`TouchUtil.Button: layout id "{self.LayoutId}" is already taken. Saved layouts key on this id, so give one of them an explicit LayoutId.`
 		)
 	end
+	--
 
-	local root = get_root()
+	--
+	const root = get_root()
+	const button = create_button(self, given)
 
-	local button
+	configure_base(self, button, given, action_name)
+	--
 
-	if given.Adopt then
-		button = given.Adopt
-		self.IsAdopted = true
-		self.IsNormalImage = true
-	else
-		button = Instance.new("ImageButton")
-		button.BackgroundTransparency = 1
-		button.BorderSizePixel = 0
-		button.ScaleType = if self.IsNormalImage then Enum.ScaleType.Fit else Enum.ScaleType.Slice
-		button.Image = self.Icon
-
-		if not self.IsNormalImage then
-			button.ImageRectSize = TouchConfig.RECT_SIZE
-			button.ImageRectOffset = TouchConfig.RECT_OFFSET_IDLE
-		end
-	end
-
-	if self.IsAdopted then
-		self._BaseSize = if button.AbsoluteSize.Y > 0 then button.AbsoluteSize.Y else TouchConfig.DEFAULT_SIZE
-		self.MinSize = given.MinSize or self._BaseSize * 0.6
-		self.MaxSize = given.MaxSize or self._BaseSize * 2
-	else
-		self._BaseSize = TouchConfig.BASE_SIZE
-		button.Name = action_name
-		button.Size = UDim2.fromOffset(TouchConfig.BASE_SIZE, TouchConfig.BASE_SIZE)
-		button.AnchorPoint = Vector2.zero
-		button.Active = given.Sink == true
-		button.Visible = false
-	end
-
+	--
 	button.LayoutOrder = given.Order or 0
 	self.Order = given.Order or 0
 
 	self.Instance = if self.IsAdopted then button else self.Keeper:Add(button)
+	--
 
+	--
 	local button_scale = button:FindFirstChildOfClass("UIScale")
 
 	if button_scale == nil then
@@ -944,12 +1363,16 @@ local function new(action_name: string, options: ButtonOptions?)
 		self.Keeper:Add(button_scale)
 	end
 
-	self._Scale = button_scale
+	self._Scale = button_scale :: UIScale
 	self._LayoutPosition = nil
 	self._SinkDefault = button.Active
+	--
 
-	local size = apply_size(self, given.Size or (if self.IsAdopted then self._BaseSize else resolve_default_size()))
+	--
+	const size = apply_size(self, given.Size or (if self.IsAdopted then self._BaseSize else resolve_default_size()))
+	--
 
+	--
 	self.Overlay = given.Overlay
 	self._OverlayTransparency = given.OverlayTransparency or TouchConfig.OVERLAY_TRANSPARENCY
 	self._OverlayScale = given.OverlayScale or TouchConfig.OVERLAY_SCALE
@@ -958,9 +1381,11 @@ local function new(action_name: string, options: ButtonOptions?)
 	if self.Overlay then
 		ensure_overlay(self).Image = self.Overlay
 	end
+	--
 
+	--
 	if self.Text then
-		local label = Instance.new("TextLabel")
+		const label = Instance.new("TextLabel")
 		label.Name = "Label"
 		label.BackgroundTransparency = 1
 		label.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold)
@@ -977,26 +1402,14 @@ local function new(action_name: string, options: ButtonOptions?)
 
 		self._Label = label
 	end
+	--
 
-	if self.IsAdopted then
-		self.Zone = nil
-		self.Position = button.Position
-	elseif given.Position then
-		self.Position = given.Position
-		self._LayoutPosition = Vector2.new(given.Position.X.Scale, given.Position.Y.Scale)
-		button.AnchorPoint = CENTRE_ANCHOR
-		button.Position = given.Position
-		button.Parent = root
-	else
-		local zone = self.Zone or "BottomRight"
-		assert_zone(zone, "Button")
-
-		if given.Order == nil then
-			self.Order = next_zone_order(zone)
-		end
-
-		place_in_zone(self, zone)
+	--
+	if not self.IsAdopted and not given.Position then
+		assert_zone(self.Zone or "BottomRight", "Button")
 	end
+
+	place_initial(self, button, given, root)
 
 	self._Default = {
 		Zone = self.Zone,
@@ -1004,27 +1417,36 @@ local function new(action_name: string, options: ButtonOptions?)
 		Position = self.Position,
 		Size = size,
 	}
+	--
 
 	self.Keeper:Connect(button.InputBegan, function(input_object: InputObject)
+		--
 		if not PRESS_INPUT_TYPES[input_object.UserInputType] then
 			return
 		end
+
 		if not self.Enabled or not button.Visible then
 			return
 		end
+		--
 
+		--
 		if EditMode then
 			begin_edit_drag(self, input_object)
 			return
 		end
+		--
 
+		--
 		if self.IsAdopted or self._PressInput then
 			return
 		end
+		--
 
 		press(self, input_object)
 	end)
 
+	--
 	self.Keeper:Connect(button.InputEnded, function(input_object: InputObject)
 		if input_object ~= self._PressInput then
 			return
@@ -1045,97 +1467,138 @@ local function new(action_name: string, options: ButtonOptions?)
 		release(self, nil)
 		cancel_drags_for(self)
 	end)
+	--
 
+	--
 	Buttons[self] = true
 	ButtonsByLayoutId[self.LayoutId] = self
+
 	index_contexts(self)
 	self:_Resolve()
+	--
 
+	--
 	if EditMode then
 		self:_ApplyEditMode()
 	end
+	--
 
 	return self
 end
 
-export type TouchButton = typeof(new(...))
-
 function TouchButton._Resolve(self: TouchButton)
+	--
 	if self.IsAdopted then
 		return
 	end
+	--
 
-	local visible = self._Visible and self._ShowOn[DeviceType] == true and contexts_satisfied(self)
+	--
+	const visible = self._Visible and self._ShowOn[DeviceType] == true and contexts_satisfied(self)
 
 	if self.Instance.Visible == visible then
 		return
 	end
+	--
 
+	--
 	self.Instance.Visible = visible
+	--
 
-	if not visible then
-		release(self, nil)
-		cancel_drags_for(self)
+	--
+	if visible then
+		return
 	end
+	--
+
+	--
+	release(self, nil)
+	cancel_drags_for(self)
+	--
 end
 
---
 function TouchButton._BeginProxy(self: TouchButton)
+	--
 	if self._Proxy or not self.IsAdopted then
 		return
 	end
+	--
 
-	local real = self.Instance
-	local rect = real.AbsoluteSize
-	local centre = absolute_centre(real)
+	--
+	const real = self.Instance
+	const rect = real.AbsoluteSize
+	const centre = absolute_centre(real)
+	--
 
-	local proxy = real:Clone()
+	--
+	const proxy = real:Clone()
 	proxy.Name = `{real.Name}EditProxy`
 	proxy.Active = true
 	proxy.Visible = true
 	proxy.Size = UDim2.fromOffset(rect.X, rect.Y)
 	proxy.Parent = Root
 
-	local proxy_scale = proxy:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
+	const proxy_scale = proxy:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
 	proxy_scale.Scale = 1
 	proxy_scale.Parent = proxy
+	--
 
+	--
 	self._Real = real
 	self._Proxy = proxy
 	self.Instance = proxy
 	self._Scale = proxy_scale
 	self._BaseSize = if rect.Y > 0 then rect.Y else TouchConfig.DEFAULT_SIZE
 	self._LayoutSize = self._BaseSize
-	self._ProxyKeeper = Keeper.new()
-
-	apply_absolute_centre(proxy, centre)
+	--
 
 	--
-	self._ProxyKeeper:Connect(proxy.InputBegan, function(input_object: InputObject)
+	const proxy_keeper = Keeper.new()
+	self._ProxyKeeper = proxy_keeper
+
+	apply_absolute_centre(proxy, centre)
+	--
+
+	proxy_keeper:Connect(proxy.InputBegan, function(input_object: InputObject)
 		begin_edit_drag(self, input_object)
 	end)
 end
 
 function TouchButton._CommitProxy(self: TouchButton)
-	if self._Proxy == nil then
+	--
+	const proxy = self._Proxy
+
+	if proxy == nil then
 		return
 	end
+	--
 
-	local viewport = viewport_size()
-	local centre = absolute_centre(self._Proxy)
+	--
+	const viewport = viewport_size()
+	const centre = absolute_centre(proxy)
 
 	self._JumpCentre = Vector2.new(centre.X / viewport.X, centre.Y / viewport.Y)
 	self._JumpScale = self._Scale.Scale
+	--
 
-	self._ProxyKeeper:Destroy()
+	--
+	const proxy_keeper = self._ProxyKeeper :: Keeper.Keeper
+
+	proxy_keeper:Destroy()
 	self._ProxyKeeper = nil
-	self._Proxy:Destroy()
+	proxy:Destroy()
 	self._Proxy = nil
 	self._Outline = nil
 	self._Handle = nil
 	self._HandleInput = nil
-	self.Instance = self._Real
-	self._Scale = self._Real:FindFirstChildOfClass("UIScale")
+	--
+
+	--
+	const real = self._Real :: GuiObject
+
+	self.Instance = real
+	self._Scale = real:FindFirstChildOfClass("UIScale") :: UIScale
+	--
 
 	self:_ApplyAdoptedLayout()
 end
@@ -1146,21 +1609,25 @@ end
 	Called after edit mode ends and whenever the CoreGui controls are rebuilt -- re-enabling them
 	can replace the button entirely, which would otherwise silently discard the player's layout.
 ]=]
---
 function TouchButton._ApplyAdoptedLayout(self: TouchButton)
+	--
 	if not self.IsAdopted or self._JumpCentre == nil then
 		return
 	end
 
-	local real = find_default_jump()
+	const real = find_default_jump()
 
 	if real == nil then
 		return
 	end
+	--
 
+	--
 	self.Instance = real
 	self._Real = real
+	--
 
+	--
 	local scale = real:FindFirstChildOfClass("UIScale")
 
 	if scale == nil then
@@ -1169,19 +1636,25 @@ function TouchButton._ApplyAdoptedLayout(self: TouchButton)
 		scale.Parent = real
 	end
 
-	self._Scale = scale
-	scale.Scale = self._JumpScale or 1
+	self._Scale = scale :: UIScale
+	self._Scale.Scale = self._JumpScale or 1
+	--
 
-	local viewport = viewport_size()
+	--
+	const viewport = viewport_size()
 	apply_absolute_centre(real, Vector2.new(self._JumpCentre.X * viewport.X, self._JumpCentre.Y * viewport.Y))
+	--
 end
 
 function TouchButton._BuildEditAffordances(self: TouchButton)
+	--
 	if self._Outline then
 		return
 	end
+	--
 
-	local outline = Instance.new("UIStroke")
+	--
+	const outline = Instance.new("UIStroke")
 	outline.Name = "EditOutline"
 	outline.Color = TouchConfig.EDIT_OUTLINE_COLOR
 	outline.Transparency = TouchConfig.EDIT_OUTLINE_TRANSPARENCY
@@ -1190,11 +1663,13 @@ function TouchButton._BuildEditAffordances(self: TouchButton)
 	outline.Enabled = false
 	outline.Parent = self.Instance
 
-	local keeper = self._ProxyKeeper or self.Keeper
+	const keeper = self._ProxyKeeper or self.Keeper
 
 	self._Outline = keeper:Add(outline)
+	--
 
-	local handle = Instance.new("ImageButton")
+	--
+	const handle = Instance.new("ImageButton")
 	handle.Name = "ResizeHandle"
 	handle.BackgroundTransparency = 1
 	handle.BorderSizePixel = 0
@@ -1211,11 +1686,13 @@ function TouchButton._BuildEditAffordances(self: TouchButton)
 
 	self._Handle = keeper:Add(handle)
 	apply_size(self, self._LayoutSize)
+	--
 
 	keeper:Connect(handle.InputBegan, function(input_object: InputObject)
 		if not PRESS_INPUT_TYPES[input_object.UserInputType] then
 			return
 		end
+
 		if not EditMode or not self.Resizable then
 			return
 		end
@@ -1226,8 +1703,11 @@ function TouchButton._BuildEditAffordances(self: TouchButton)
 end
 
 function TouchButton._ExitEditMode(self: TouchButton)
+	--
 	cancel_drags_for(self)
+	--
 
+	--
 	if self._Proxy then
 		self._EditApplied = false
 		return
@@ -1236,32 +1716,51 @@ function TouchButton._ExitEditMode(self: TouchButton)
 	if not self._EditApplied then
 		return
 	end
+	--
 
+	--
 	self._EditApplied = false
 	self.Instance.Active = self._SinkDefault
-	self._Outline.Enabled = false
-	self._Handle.Visible = false
+
+	const outline = self._Outline :: UIStroke
+	const handle = self._Handle :: ImageButton
+
+	outline.Enabled = false
+	handle.Visible = false
+	--
 end
 
 function TouchButton._ApplyEditMode(self: TouchButton)
+	--
 	if not EditMode or (not self.Movable and not self.Resizable) then
 		self:_ExitEditMode()
 		self:_CommitProxy()
 		return
 	end
+	--
 
+	--
 	self:_BeginProxy()
 	self:_BuildEditAffordances()
 	release(self, nil)
+	--
 
+	--
 	if not self._EditApplied then
 		self._EditApplied = true
 		self._SinkDefault = self.Instance.Active
 	end
 
 	self.Instance.Active = true
-	self._Outline.Enabled = true
-	self._Handle.Visible = self.Resizable
+	--
+
+	--
+	const outline = self._Outline :: UIStroke
+	const handle = self._Handle :: ImageButton
+
+	outline.Enabled = true
+	handle.Visible = self.Resizable
+	--
 end
 
 --[=[
@@ -1270,10 +1769,14 @@ end
 	@param icon string -- The asset to display.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetIcon(self: TouchButton, icon: string): TouchButton
+	--
+	const image = self.Instance :: ImageButton
+
 	self.Icon = icon
-	self.Instance.Image = icon
+	image.Image = icon
+	--
+
 	return self
 end
 
@@ -1283,16 +1786,20 @@ end
 	@param text string -- The label text.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetText(self: TouchButton, text: string): TouchButton
+	--
 	self.Text = text
+	--
 
+	--
 	if self._Label then
 		self._Label.Text = text
 		return self
 	end
+	--
 
-	local label = Instance.new("TextLabel")
+	--
+	const label = Instance.new("TextLabel")
 	label.Name = "Label"
 	label.BackgroundTransparency = 1
 	label.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold)
@@ -1308,6 +1815,8 @@ function TouchButton.SetText(self: TouchButton, text: string): TouchButton
 	label.Parent = self.Instance
 
 	self._Label = label
+	--
+
 	return self
 end
 
@@ -1321,20 +1830,24 @@ end
 	@param image string? -- The asset to overlay, or nil to hide it.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetOverlay(self: TouchButton, image: string?): TouchButton
+	--
 	self.Overlay = image
+	--
 
+	--
 	if image == nil then
-		if self._Overlay then
-			self._Overlay.Visible = false
-		end
+		hide_overlay(self)
 		return self
 	end
+	--
 
-	local overlay = ensure_overlay(self)
+	--
+	const overlay = ensure_overlay(self)
 	overlay.Image = image
 	overlay.Visible = true
+	--
+
 	return self
 end
 
@@ -1347,10 +1860,12 @@ end
 	@param transparency number -- 0 is opaque, 1 is invisible.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetOverlayTransparency(self: TouchButton, transparency: number): TouchButton
+	--
 	self._OverlayTransparency = transparency
 	refresh_overlay(self)
+	--
+
 	return self
 end
 
@@ -1360,13 +1875,16 @@ end
 	@param scale number -- 1 fills the button edge to edge.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetOverlayScale(self: TouchButton, scale: number): TouchButton
+	--
 	self._OverlayScale = scale
+	--
 
+	--
 	if self._Overlay then
 		self._Overlay.Size = UDim2.new(scale, self._OverlayOffset, scale, self._OverlayOffset)
 	end
+	--
 
 	return self
 end
@@ -1377,13 +1895,16 @@ end
 	@param offset number -- Added to the scale calculation to size the overlay.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetOverlayOffset(self: TouchButton, offset: number): TouchButton
+	--
 	self._OverlayOffset = offset
+	--
 
+	--
 	if self._Overlay then
 		self._Overlay.Size = UDim2.new(self._OverlayScale, offset, self._OverlayScale, offset)
 	end
+	--
 
 	return self
 end
@@ -1402,9 +1923,11 @@ end
 	@param size number -- The square edge length.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetSize(self: TouchButton, size: number): TouchButton
+	--
 	apply_size(self, size)
+	--
+
 	return self
 end
 
@@ -1415,10 +1938,12 @@ end
 	@param max number -- Largest allowed edge length.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetSizeRange(self: TouchButton, min: number, max: number): TouchButton
+	--
 	self.MinSize = min
 	self.MaxSize = max
+	--
+
 	return self:SetSize(self._LayoutSize)
 end
 
@@ -1428,13 +1953,16 @@ end
 	@param movable boolean -- Whether dragging is allowed.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetMovable(self: TouchButton, movable: boolean): TouchButton
+	--
 	self.Movable = movable
+	--
 
+	--
 	if EditMode then
 		self:_ApplyEditMode()
 	end
+	--
 
 	return self
 end
@@ -1445,13 +1973,16 @@ end
 	@param resizable boolean -- Whether the resize handle appears.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetResizable(self: TouchButton, resizable: boolean): TouchButton
+	--
 	self.Resizable = resizable
+	--
 
+	--
 	if EditMode then
 		self:_ApplyEditMode()
 	end
+	--
 
 	return self
 end
@@ -1463,14 +1994,18 @@ end
 	@param order number? -- Position within the zone. Lower comes first.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetZone(self: TouchButton, zone: Zone, order: number?): TouchButton
+	--
 	assert_zone(zone, "SetZone")
+	--
 
+	--
 	self.Order = order or next_zone_order(zone)
 	self.Instance.LayoutOrder = self.Order
 
 	place_in_zone(self, zone)
+	--
+
 	return self
 end
 
@@ -1483,9 +2018,11 @@ end
 	@param position UDim2 -- Position within the touch ScreenGui, anchored at the button's centre.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetPosition(self: TouchButton, position: UDim2): TouchButton
+	--
 	place_at_scale(self, Vector2.new(position.X.Scale, position.Y.Scale))
+	--
+
 	return self
 end
 
@@ -1498,13 +2035,15 @@ end
 	@param contexts { [string]: boolean } -- The required context states.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetVisibleWhen(self: TouchButton, contexts: { [string]: boolean }): TouchButton
-	local previous = self._VisibleWhen
+	--
+	const previous = self._VisibleWhen
 
 	self._VisibleWhen = table.clone(contexts)
 	index_contexts(self, previous)
 	self:_Resolve()
+	--
+
 	return self
 end
 
@@ -1514,16 +2053,20 @@ end
 	@param devices { DeviceType } -- The devices to show on.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetShowOn(self: TouchButton, devices: { InputUtil.DeviceType }): TouchButton
-	local allowed = {}
+	--
+	const allowed: DeviceSet = {}
 
 	for _, device in devices do
 		allowed[device] = true
 	end
+	--
 
+	--
 	self._ShowOn = allowed
 	self:_Resolve()
+	--
+
 	return self
 end
 
@@ -1534,20 +2077,27 @@ end
 	@param enabled boolean -- Whether the button accepts input.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetEnabled(self: TouchButton, enabled: boolean): TouchButton
+	--
 	if self.Enabled == enabled then
 		return self
 	end
+	--
+
+	--
+	const image = self.Instance :: ImageButton
 
 	self.Enabled = enabled
-	self.Instance.ImageTransparency = if enabled then 0 else TouchConfig.DISABLED_TRANSPARENCY
+	image.ImageTransparency = if enabled then 0 else TouchConfig.DISABLED_TRANSPARENCY
 	refresh_overlay(self)
+	--
 
+	--
 	if not enabled then
 		release(self, nil)
 		cancel_drags_for(self)
 	end
+	--
 
 	return self
 end
@@ -1558,10 +2108,12 @@ end
 	@param visible boolean -- Whether the button may be shown.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.SetVisible(self: TouchButton, visible: boolean): TouchButton
+	--
 	self._Visible = visible
 	self:_Resolve()
+	--
+
 	return self
 end
 
@@ -1569,7 +2121,6 @@ end
 	Whether a finger or cursor is holding the button right now.
 	@return boolean
 ]=]
---
 function TouchButton.IsPressed(self: TouchButton): boolean
 	return self._Pressed
 end
@@ -1582,23 +2133,20 @@ end
 
 	@return LayoutEntry
 ]=]
---
 function TouchButton.GetLayout(self: TouchButton): LayoutEntry
+	--
 	if self.IsAdopted then
-		local entry = { Scale = self._JumpScale or 1 } :: LayoutEntry
-
-		if self._JumpCentre then
-			entry.Position = { X = self._JumpCentre.X, Y = self._JumpCentre.Y }
-		end
-
-		return entry
+		return get_adopted_layout(self)
 	end
+	--
 
-	local entry = { Scale = self._LayoutSize / self._BaseSize } :: LayoutEntry
+	--
+	const entry = { Scale = self._LayoutSize / self._BaseSize } :: LayoutEntry
 
 	if self._LayoutPosition then
 		entry.Position = { X = self._LayoutPosition.X, Y = self._LayoutPosition.Y }
 	end
+	--
 
 	return entry
 end
@@ -1612,40 +2160,35 @@ end
 	@param entry LayoutEntry -- The entry to apply.
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.ApplyLayout(self: TouchButton, entry: LayoutEntry): TouchButton
+	--
 	if type(entry) ~= "table" then
 		return self
 	end
+	--
 
+	--
 	if self.IsAdopted then
-		if type(entry.Scale) == "number" then
-			self._JumpScale = entry.Scale
-			self.IsCustomised = true
-		end
-
-		local centre = entry.Position
-
-		if type(centre) == "table" and type(centre.X) == "number" and type(centre.Y) == "number" then
-			self._JumpCentre = Vector2.new(centre.X, centre.Y)
-			self.IsCustomised = true
-		end
-
-		self:_ApplyAdoptedLayout()
+		apply_adopted_layout_entry(self, entry)
 		return self
 	end
+	--
 
+	--
 	if type(entry.Scale) == "number" then
 		self:SetSize(entry.Scale * self._BaseSize)
 		self.IsCustomised = true
 	end
+	--
 
-	local position = entry.Position
+	--
+	const position = entry.Position
 
 	if type(position) == "table" and type(position.X) == "number" and type(position.Y) == "number" then
 		place_at_scale(self, snap_and_clamp(self, Vector2.new(position.X, position.Y)))
 		self.IsCustomised = true
 	end
+	--
 
 	return self
 end
@@ -1655,35 +2198,38 @@ end
 
 	@return TouchButton -- Self, for chaining.
 ]=]
---
 function TouchButton.ResetLayout(self: TouchButton): TouchButton
-	local default = self._Default
+	--
+	const default = self._Default
 
 	self:SetSize(default.Size)
+	restore_default_placement(self, default)
+	--
 
-	if default.Zone then
-		self:SetZone(default.Zone, default.Order)
-	elseif default.Position then
-		self:SetPosition(default.Position)
-	end
-
+	--
 	self.IsCustomised = false
 	TouchUtilModule.LayoutChanged:Fire(self.LayoutId, self:GetLayout())
+	--
+
 	return self
 end
 
 --[=[
 	Destroys the button, releasing its action first so it cannot leave the action stuck active.
 ]=]
---
 function TouchButton.Destroy(self: TouchButton)
+	--
 	release(self, nil)
 	cancel_drags_for(self)
+	--
 
-	local previous = self._VisibleWhen
+	--
+	const previous = self._VisibleWhen
 	self._VisibleWhen = {}
 	index_contexts(self, previous)
+	--
 
+	--
 	Buttons[self] = nil
 
 	if AdoptedJump == self then
@@ -1693,6 +2239,7 @@ function TouchButton.Destroy(self: TouchButton)
 	if ButtonsByLayoutId[self.LayoutId] == self then
 		ButtonsByLayoutId[self.LayoutId] = nil
 	end
+	--
 
 	self.Keeper:Destroy()
 end
@@ -1707,7 +2254,6 @@ end
 	@param options ButtonOptions? -- Appearance, layout, gating and edit permissions.
 	@return TouchButton
 ]=]
---
 function TouchUtilModule.Button(action_name: string, options: ButtonOptions?): TouchButton
 	return new(action_name, options)
 end
@@ -1721,25 +2267,32 @@ end
 
 	@param enabled boolean -- Whether the player is editing the layout.
 ]=]
---
 function TouchUtilModule.SetEditMode(enabled: boolean)
+	--
 	if EditMode == enabled then
 		return
 	end
 
 	EditMode = enabled
+	--
 
+	--
 	for button in Buttons do
 		button:_ApplyEditMode()
 	end
+	--
 
+	--
 	set_default_controls(not enabled)
+	--
 
+	--
 	if not enabled and AdoptedJump then
 		task.defer(function()
-			AdoptedJump:_ApplyAdoptedLayout()
+			(AdoptedJump :: TouchButton):_ApplyAdoptedLayout()
 		end)
 	end
+	--
 
 	TouchUtilModule.EditModeChanged:Fire(enabled)
 end
@@ -1748,7 +2301,6 @@ end
 	Whether the layer is in edit mode.
 	@return boolean
 ]=]
---
 function TouchUtilModule.IsEditMode(): boolean
 	return EditMode
 end
@@ -1760,9 +2312,11 @@ end
 	@param zone Zone -- The zone to nudge.
 	@param offset Vector2 -- The offset, or `Vector2.zero` to clear it.
 ]=]
---
 function TouchUtilModule.SetZoneOffset(zone: Zone, offset: Vector2)
+	--
 	ZoneOffsets[zone] = offset
+	--
+
 	reposition_zone(zone)
 end
 
@@ -1780,11 +2334,13 @@ end
 	@param options ButtonOptions? -- Overrides. Defaults to LayoutId "Jump".
 	@return TouchButton?
 ]=]
---
 function TouchUtilModule.AdoptJumpButton(options: ButtonOptions?): TouchButton?
+	--
 	assert_client("AdoptJumpButton")
 	get_root()
+	--
 
+	--
 	if AdoptedJump then
 		return AdoptedJump
 	end
@@ -1793,18 +2349,24 @@ function TouchUtilModule.AdoptJumpButton(options: ButtonOptions?): TouchButton?
 		return nil
 	end
 
-	local source = find_default_jump()
+	const source = find_default_jump()
 
 	if source == nil then
 		return nil
 	end
+	--
 
-	local given = table.clone(options or {})
+	--
+	const given = table.clone(options or {} :: ButtonOptions)
 
 	given.Adopt = source
 	given.LayoutId = given.LayoutId or "Jump"
+	--
 
+	--
 	AdoptedJump = new("Jump", given)
+	--
+
 	return AdoptedJump
 end
 
@@ -1821,23 +2383,31 @@ end
 	@param enabled boolean -- Whether the player may move and resize the jump button.
 	@return TouchButton? -- The adopted button, or nil if there is none to adopt.
 ]=]
---
 function TouchUtilModule.SetJumpButtonEditable(enabled: boolean): TouchButton?
+	--
 	assert_client("SetJumpButtonEditable")
+	--
 
+	--
 	if enabled and AdoptedJump == nil then
-		local previous = TouchConfig.JUMP_BUTTON_EDITABLE
+		const previous = TouchConfig.JUMP_BUTTON_EDITABLE
 		TouchConfig.JUMP_BUTTON_EDITABLE = true
 		TouchUtilModule.AdoptJumpButton()
 		TouchConfig.JUMP_BUTTON_EDITABLE = previous
 	end
+	--
 
+	--
 	if AdoptedJump == nil then
 		return nil
 	end
+	--
 
+	--
 	AdoptedJump:SetMovable(enabled)
 	AdoptedJump:SetResizable(enabled)
+	--
+
 	return AdoptedJump
 end
 
@@ -1845,7 +2415,6 @@ end
 	Returns the adopted jump button, if one has been adopted.
 	@return TouchButton?
 ]=]
---
 function TouchUtilModule.GetJumpButton(): TouchButton?
 	return AdoptedJump
 end
@@ -1861,15 +2430,18 @@ end
 	@param options ButtonOptions? -- Overrides. `LayoutId` defaults to the instance name.
 	@return TouchButton
 ]=]
---
 function TouchUtilModule.Adopt(instance: GuiObject, options: ButtonOptions?): TouchButton
+	--
 	assert_client("Adopt")
 	get_root()
+	--
 
-	local given = table.clone(options or {})
+	--
+	const given = table.clone(options or {} :: ButtonOptions)
 
 	given.Adopt = instance
 	given.LayoutId = given.LayoutId or instance.Name
+	--
 
 	return new(instance.Name, given)
 end
@@ -1881,24 +2453,29 @@ end
 	Layout problems here are geometry, and geometry is only arguable until someone reads the
 	numbers off a real device.
 ]=]
---
 function TouchUtilModule.DebugLayout()
+	--
 	assert_client("DebugLayout")
+	--
 
-	local root = get_root()
+	--
+	const root = get_root()
 
-	PrintUtil:Print(`device={DeviceType} edit={EditMode} rootScale={get_scale_factor()}`)
-	PrintUtil:Print(`root abs={root.AbsoluteSize} pos={root.AbsolutePosition}`)
-	PrintUtil:Print(`default jump found={find_default_jump() ~= nil}`)
+	print(`device={DeviceType} edit={EditMode} rootScale={get_scale_factor()}`)
+	print(`root abs={root.AbsoluteSize} pos={root.AbsolutePosition}`)
+	print(`default jump found={find_default_jump() ~= nil}`)
 
-	PrintUtil:Print(`default button size={resolve_default_size()}`)
+	print(`default button size={resolve_default_size()}`)
+	--
 
+	--
 	for button in Buttons do
-		local instance = button.Instance
-		PrintUtil:Print(
+		const instance = button.Instance
+		print(
 			`button {button.LayoutId} zone={tostring(button.Zone)} size={button._LayoutSize} visible={instance.Visible} abs={instance.AbsolutePosition} x {instance.AbsoluteSize}`
 		)
 	end
+	--
 end
 
 --[=[
@@ -1906,9 +2483,10 @@ end
 
 	@param pixels number? -- The grid step, `0` for free placement, or nil to restore `Config.TOUCH.EDIT_GRID`.
 ]=]
---
 function TouchUtilModule.SetGrid(pixels: number?)
+	--
 	Grid = pixels
+	--
 end
 
 --[=[
@@ -1919,16 +2497,18 @@ end
 
 	@return Layout
 ]=]
---
 function TouchUtilModule.GetLayout(): Layout
-	local entries = {}
+	--
+	const entries = {}
 
 	for button in Buttons do
 		if not button.IsCustomised then
 			continue
 		end
+
 		entries[button.LayoutId] = button:GetLayout()
 	end
+	--
 
 	return {
 		Version = TouchConfig.LAYOUT_VERSION,
@@ -1946,22 +2526,24 @@ end
 	@param layout Layout -- A table previously returned by `GetLayout`.
 	@return boolean -- Whether the layout was applied.
 ]=]
---
 function TouchUtilModule.ApplyLayout(layout: Layout): boolean
+	--
 	if type(layout) ~= "table" or type(layout.Entries) ~= "table" then
-		PrintUtil:Warn("TouchUtil.ApplyLayout: expected a table with an Entries field.")
+		warn("TouchUtil.ApplyLayout: expected a table with an Entries field.")
 		return false
 	end
 
 	if layout.Version ~= TouchConfig.LAYOUT_VERSION then
-		PrintUtil:Warn(
+		warn(
 			`TouchUtil.ApplyLayout: layout version {tostring(layout.Version)} does not match {TouchConfig.LAYOUT_VERSION}; ignoring it.`
 		)
 		return false
 	end
+	--
 
+	--
 	for layout_id, entry in layout.Entries do
-		local button = ButtonsByLayoutId[layout_id]
+		const button = ButtonsByLayoutId[layout_id]
 
 		if button == nil then
 			continue
@@ -1969,6 +2551,7 @@ function TouchUtilModule.ApplyLayout(layout: Layout): boolean
 
 		button:ApplyLayout(entry)
 	end
+	--
 
 	return true
 end
@@ -1978,21 +2561,19 @@ end
 
 	@param layout_id string? -- The button to reset, or nil for all of them.
 ]=]
---
 function TouchUtilModule.ResetLayout(layout_id: string?)
+	--
 	if layout_id then
-		local button = ButtonsByLayoutId[layout_id]
-
-		if button then
-			button:ResetLayout()
-		end
-
+		reset_button_layout(layout_id)
 		return
 	end
+	--
 
+	--
 	for button in Buttons do
 		button:ResetLayout()
 	end
+	--
 end
 
 --[=[
@@ -2001,23 +2582,19 @@ end
 	@param context string -- The context name.
 	@param state boolean -- Its new state.
 ]=]
---
 function TouchUtilModule.SetContext(context: string, state: boolean)
-	local previous = Contexts[context] == true
+	--
+	const previous = Contexts[context] == true
 
 	if previous == state then
 		return
 	end
+	--
 
+	--
 	Contexts[context] = state
-
-	local affected = ButtonsByContext[context]
-
-	if affected then
-		for button in affected do
-			button:_Resolve()
-		end
-	end
+	resolve_context_buttons(context)
+	--
 
 	TouchUtilModule.ContextChanged:Fire(context, state, previous)
 end
@@ -2027,11 +2604,12 @@ end
 
 	@param contexts { [string]: boolean } -- The contexts to set.
 ]=]
---
 function TouchUtilModule.SetContexts(contexts: { [string]: boolean })
+	--
 	for context, state in contexts do
 		TouchUtilModule.SetContext(context, state)
 	end
+	--
 end
 
 --[=[
@@ -2040,7 +2618,6 @@ end
 	@param context string -- The context name.
 	@return boolean
 ]=]
---
 function TouchUtilModule.GetContext(context: string): boolean
 	return Contexts[context] == true
 end
@@ -2051,16 +2628,18 @@ end
 	@param action_name string -- The action to look up.
 	@return { TouchButton }
 ]=]
---
 function TouchUtilModule.GetButtons(action_name: string): { TouchButton }
-	local matches = {}
+	--
+	const matches = {}
 
 	for button in Buttons do
 		if button.Action ~= action_name then
 			continue
 		end
+
 		table.insert(matches, button)
 	end
+	--
 
 	return matches
 end
@@ -2071,7 +2650,6 @@ end
 	@param layout_id string -- The id to look up.
 	@return TouchButton?
 ]=]
---
 function TouchUtilModule.GetButton(layout_id: string): TouchButton?
 	return ButtonsByLayoutId[layout_id]
 end
@@ -2081,10 +2659,14 @@ end
 
 	@param enabled boolean -- Whether the layer is on screen.
 ]=]
---
 function TouchUtilModule.SetEnabled(enabled: boolean)
+	--
 	assert_client("SetEnabled")
+	--
+
+	--
 	get_root().Enabled = enabled
+	--
 end
 
 --[=[
@@ -2092,27 +2674,33 @@ end
 
 	@return ScreenGui
 ]=]
---
 function TouchUtilModule.GetRoot(): ScreenGui
+	--
 	assert_client("GetRoot")
+	--
+
 	return get_root()
 end
 
 --[=[
 	Destroys every button and the touch layer itself. A later `Button` call rebuilds it.
 ]=]
---
 function TouchUtilModule.Destroy()
+	--
 	for button in Buttons do
 		button:Destroy()
 	end
+	--
 
+	--
 	if RootKeeper then
 		RootKeeper:Destroy()
 	end
+	--
 
+	--
 	RootKeeper = nil
-	ControlsKeeper = nil
+	_ControlsKeeper = nil
 	AdoptedJump = nil
 	DefaultSize = nil
 	Root = nil
@@ -2120,6 +2708,7 @@ function TouchUtilModule.Destroy()
 	EditMode = false
 	Grid = nil
 	PlayerGuiRef = nil
+
 	ZoneNextOrder = {}
 	ZoneOffsets = {}
 	Buttons = {}
@@ -2128,6 +2717,7 @@ function TouchUtilModule.Destroy()
 	ButtonsByContext = {}
 	Drags = {}
 	Claims = {}
+	--
 end
 
 return TouchUtilModule

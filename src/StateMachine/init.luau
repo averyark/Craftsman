@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > init.luau
     Author      > AveryArk
@@ -17,18 +17,26 @@ local StateMachine = {
 	Types = require(script.Types),
 }
 
-function StateMachine.Register(machine, targets: { any }?): boolean
+--
+type Machine = typeof(StateMachine.Machine.new())
+--
+
+function StateMachine.Register(machine: Machine, targets: { Player }?): boolean
+	--
 	if not RunService:IsServer() then
 		return StateMachine.Client:Register(machine)
 	end
+	--
 
 	return StateMachine.Server:Register(machine, targets)
 end
 
-function StateMachine.Unregister(machine): boolean
+function StateMachine.Unregister(machine: Machine): boolean
+	--
 	if not RunService:IsServer() then
 		return StateMachine.Client:Unregister(machine)
 	end
+	--
 
 	return StateMachine.Server:Unregister(machine)
 end

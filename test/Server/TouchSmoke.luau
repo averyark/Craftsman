@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > TouchSmoke.luau
     Author      > AveryArk

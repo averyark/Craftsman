@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Concurrency.luau
     Author      > AveryArk
@@ -6,82 +6,117 @@
     Created     > 11/06/2026
 --]]
 
-const Concurrency = {}
+local Concurrency = {}
 
+--
 local AsyncLock = {}
 AsyncLock.__index = AsyncLock
+--
 
 local function new_async_lock()
-	local self = setmetatable({
-		_Locks = setmetatable({}, { __mode = "k" }),
+	--
+	const self = setmetatable({
+		_Locks = setmetatable({} :: { [unknown]: boolean }, { __mode = "k" }),
 	}, AsyncLock)
+	--
+
 	return self
 end
 
+--
 export type AsyncLock = typeof(new_async_lock())
+--
 
-function AsyncLock.Execute(self: AsyncLock, key: any, callback: (...any) -> ...any, ...: any): boolean
+function AsyncLock.Execute<A...>(self: AsyncLock, key: unknown, callback: (A...) -> ...unknown, ...: A...): boolean
+	--
 	if self._Locks[key] then
 		return false
 	end
-	self._Locks[key] = true
 
+	self._Locks[key] = true
+	--
+
+	--
 	task.spawn(function(...)
-		local success, err = pcall(callback, ...)
+		const success, err = pcall(callback, ...)
 		self._Locks[key] = nil
 
-		if not success then
-			warn("Error in AsyncLock callback: " .. tostring(err))
+		if success then
+			return
 		end
+
+		warn(`Error in AsyncLock callback: {err}`)
 	end, ...)
+	--
 
 	return true
 end
 
-function AsyncLock.IsLocked(self: AsyncLock, key: any): boolean
+function AsyncLock.IsLocked(self: AsyncLock, key: unknown): boolean
 	return self._Locks[key] == true
 end
 
-function AsyncLock.Release(self: AsyncLock, key: any)
+function AsyncLock.Release(self: AsyncLock, key: unknown)
+	--
 	self._Locks[key] = nil
+	--
 end
 
+--
 AsyncLock.new = new_async_lock
+--
 
+--
 local KeyedDebounce = {}
 KeyedDebounce.__index = KeyedDebounce
+--
 
 local function new_keyed_debounce(cooldown: number)
-	local self = setmetatable({
+	--
+	const self = setmetatable({
 		_Cooldown = cooldown,
-		_LastCalls = setmetatable({}, { __mode = "k" }),
+		_LastCalls = setmetatable({} :: { [unknown]: number }, { __mode = "k" }),
 	}, KeyedDebounce)
+	--
+
 	return self
 end
 
+--
 export type KeyedDebounce = typeof(new_keyed_debounce(0))
+--
 
-function KeyedDebounce.Call(self: KeyedDebounce, key: any, callback: (...any) -> ...any, ...: any): boolean
-	local now = os.clock()
-	local last_call = self._LastCalls[key]
+function KeyedDebounce.Call<A...>(self: KeyedDebounce, key: unknown, callback: (A...) -> ...unknown, ...: A...): boolean
+	--
+	const now = os.clock()
+	const last_call = self._LastCalls[key]
 
 	if last_call and (now - last_call < self._Cooldown) then
 		return false
 	end
+	--
 
+	--
 	self._LastCalls[key] = now
 	task.spawn(callback, ...)
+	--
+
 	return true
 end
 
-function KeyedDebounce.Clear(self: KeyedDebounce, key: any)
+function KeyedDebounce.Clear(self: KeyedDebounce, key: unknown)
+	--
 	self._LastCalls[key] = nil
+	--
 end
 
+--
 KeyedDebounce.new = new_keyed_debounce
+--
 
 --
 Concurrency.AsyncLock = AsyncLock
 Concurrency.KeyedDebounce = KeyedDebounce
+--
 
 return Concurrency

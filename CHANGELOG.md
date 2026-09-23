@@ -5,6 +5,337 @@ version, as `0.7.0` did.
 
 ---
 
+## 0.9.0
+
+Craftsman is now a smaller package. It ships on Ember instead of Wally. It no longer persists
+player data, processes purchases or wraps Reflex. Every file is `--!strict`, and `Pathfind` was
+rewritten around a shared scheduler.
+
+Read every **Breaking** note before upgrading. Most games will hit at least two: the move to Ember,
+and `PrintUtil` losing `Print`, `Warn`, `Error` and `Assert`.
+
+### Breaking — Craftsman ships on Ember, not Wally
+
+**What changed.** The package is published to the Ember registry as `averyark/craftsman`. Wally
+releases stop at `0.8.4`.
+
+```toml
+# ember.toml
+[dependencies]
+Craftsman = { name = "averyark/craftsman", version = "^0.9.0" }
+```
+
+Craftsman now requires its dependencies relative to itself, as `../packages/roblox/Promise` and so
+on, which is the layout Ember installs. Copying `src` into a Wally `Packages` folder no longer
+works: the requires will not resolve.
+
+**Dependencies.** Craftsman now depends on four packages:
+
+| Package | Version |
+| :--- | :--- |
+| `howmanysmall/typed-promise` | `^4.0.6` |
+| `elitriare/bytenet-max` | `^0.2.7` |
+| `sleitnick/signal` | `^2.0.3` |
+| `averyark/keeper` | `^1.10.2` |
+
+Reflex, DocumentService, GreenTea and Spr were dropped. Spr was only ever used by `TweenUtil`,
+which now uses the copy Craftsman already vendored as `Spring`.
+
+Keeper moved from `1.9.2` to `^1.10.2`. One change reaches your code: a cleanup that throws is now
+reported with a traceback instead of being raised out of `Destroy`. That applies to a module's
+`Keeper` and an `Entity`'s `Keeper`. `StopModulesAsync` no longer rejects because one cleanup
+threw.
+
+### Breaking — `Data`, `Market` and `Store` are removed
+
+`Craftsman.DataServer`, `DataClient`, `MarketServer`, `MarketClient`, `Store`, `StoreServer` and
+`StoreClient` no longer exist. Accessing any of them through the barrel now returns `nil`.
+
+| Removed | What it did |
+| :--- | :--- |
+| `Data` | Player profiles on DocumentService: load, save, session locking, a GreenTea schema, and `GetPlayerState` synced to the client. |
+| `Market` | Developer-product receipts with idempotent grants, a gamepass ownership cache, and the `Prompt*` helpers. |
+| `Store` | A Reflex wrapper: `CreateProducer`, `CreatePlayerProducer`, `PlayerAction`, and per-player broadcasting over ByteNet. |
+
+The `DATA` and `MARKET` sections of `Config`, `export type PlayerState`, and the warning about a
+missing `DATA.SCHEMA` went with them. A `CraftsmanConfig` that still sets `DATA` or `MARKET` is
+ignored at runtime and fails type checking.
+
+**Why.** Persistence and purchases are the two places where a framework bug costs players real
+progress or real Robux. They need a dedicated, tested library, not a layer inside a scripting kit.
+Reflex also broke under Ember: its bundled `Promise` looks for its dependency in the Wally layout.
+
+**Migrating.** Move to a persistence library directly (ProfileStore, DocumentService, or your own)
+and handle `ProcessReceipt` yourself. If you used `Store`, use Reflex or Charm directly.
+
+### Breaking — `PrintUtil` keeps only `ListPrint` and `PrintObject`
+
+`PrintUtil:Print`, `:Warn`, `:Error` and `:Assert` are removed. Replace them with Luau's own
+`print`, `warn`, `error` and `assert`:
+
+```lua
+PrintUtil:Warn("Missing tool", tool_name)   -- 0.8.x
+warn(`Missing tool {tool_name}`)             -- 0.9.0
+```
+
+The wrappers added a `[ModuleName]` prefix and, for `Warn`, a traceback. Craftsman's own modules
+now call the built-ins too, so their messages lose that prefix. Nothing else about them changes,
+and each `error` still blames the caller at the same level.
+
+`ListPrint` now formats table cells with `Inspect` (see below), so its output looks slightly
+different.
+
+### Breaking — `InputStore` is gone, and `InputUtil` owns device state
+
+`InputUtil` used to mirror its state into `InputStore`, a Reflex slice. That slice left with
+`Store`. It was never exported from the barrel, but code that required `Store/InputStore` directly
+must migrate:
+
+| 0.8.x | 0.9.0 |
+| :--- | :--- |
+| `InputStore:getState().DeviceType` | `InputUtil.GetDeviceType()` |
+| Subscribing to `DeviceType` | `InputUtil.DeviceChanged:Connect(function(device, previous) end)` |
+| `InputStore:getState().ActiveActions[name]` | `InputUtil.IsActionActive(name)`, or `Began` / `Ended` |
+
+**Added: `InputUtil.DeviceChanged`.** It fires `(new_device, previous_device)` when the last used
+device changes, and only when it actually changes. It fires synchronously from the input handler,
+not on a Reflex flush. `TouchUtil` now shows and hides its buttons from this signal.
+
+### Breaking — a stuck `Pathfind` agent gives up
+
+**What changed.** A stuck agent used to jump and re-path forever. It now retries `STUCK_RETRIES`
+times (default `2`). After that it halts, fires `OnPathEnded` and then `OnStuck`, and a pending
+`GotoAsync` rejects with `"Stuck"`.
+
+**Who this breaks.** Code that expected an agent to keep trying until something moved out of its
+way. Listen to `OnStuck` and call `Goto` again if you want that behaviour back.
+
+**Also changed:**
+
+- A failed path compute now fires `OnPathFailed(reason)` instead of printing a warning.
+- `Pathfind.new` errors immediately when neither `Mover` nor `Humanoid` is given. Before, it failed
+  later on a `nil` call.
+
+### Breaking — short, clear paths skip `PathfindingService`
+
+**What changed.** With `DIRECT_PATH = true` (the default), the agent walks straight at the target
+and `OnPathCalculated` fires with a **single waypoint** when all of these hold:
+
+- no `AGENT_COSTS` are set;
+- the target is within `DIRECT_PATH_MAX_DISTANCE` studs horizontally (default `40`) and within
+  `AGENT_HEIGHT` vertically;
+- a spherecast to the target hits nothing;
+- no step along the way is taller than `DIRECT_PATH_MAX_STEP` studs (default `2`).
+
+The line is rechecked every `RECALCULATE_THROTTLE`, and the agent falls back to a full compute the
+moment something blocks it.
+
+**Who this breaks.** Code that reads the waypoint list and assumes it has several entries. Set
+`DIRECT_PATH = false` in the agent's config to always compute a full path.
+
+### Changed — every `Pathfind` agent runs on one shared scheduler
+
+Each agent used to hold one or two `Heartbeat` connections of its own. One `Heartbeat` now steps
+every agent, and full path computes go through a global queue capped by new config:
+
+```lua
+Craftsman.Config.Configure({
+	PATHFIND = {
+		MAX_COMPUTES_PER_FRAME = 4,    -- default
+		MAX_CONCURRENT_COMPUTES = 12,  -- default
+	},
+})
+```
+
+Both limits are read every frame, so `Configure` takes effect live. As a result, `Goto` no longer
+computes synchronously. The earliest a compute starts is the next frame, and under load it can
+start later. Recalculate requests that arrive while an agent is computing, queued or crossing a
+link are merged into one.
+
+**Other behaviour changes:**
+
+- **Chase.** An idle chasing agent now fully re-paths every `IDLE_RECALCULATE_INTERVAL` (default
+  `1`), trying a direct path in between. Before, it fully re-pathed on every throttle tick.
+- **Stopping distance.** Reaching the stopping distance fires `OnPathEnded` and `OnArrived`. Before,
+  the agent stopped silently.
+- **Lost targets.** A chase stops by itself when the target leaves the DataModel or its Humanoid's
+  `Health` reaches 0.
+- **Airborne agents.** A Humanoid agent in the air neither advances nor counts as stuck.
+- **Path acceptance.** A path with zero waypoints is rejected. With `PARTIAL_PATH = true`, any
+  non-`Success` status that still has waypoints is accepted, not only `NoPath`.
+- **Visualisation.** The `workspace.PathVisualisation` folder is created on first use. Before, it
+  was created on require, on both client and server, even with `VISUALISE` off.
+
+### Added — `GotoAsync`, arrival signals, link handlers and stats on `Pathfind`
+
+```lua
+agent:GotoAsync(position)
+	:andThen(function()
+		-- arrived
+	end)
+	:catch(function(reason)
+		-- "Stuck", "Unreachable", a PathStatus name, a compute error, or "Link:<label>"
+	end)
+```
+
+`GotoAsync` resolves on arrival. `Stop`, `Goto`, `GotoAsync`, `Chase` and `Destroy` cancel it, and
+cancelling it stops the agent.
+
+- **Arrival signals.** `OnArrived()`, `OnStuck()` and `OnPathFailed(reason)` are new. After
+  `OnPathEnded`, the agent fires `OnArrived` only when the last waypoint is within
+  `max(WAYPOINT_ARRIVAL_RADIUS, AGENT_RADIUS)` of the target. Otherwise it fires
+  `OnPathFailed("Unreachable")`.
+- **Link handlers.** `agent:SetLinkHandler(label, handler)` and the module-wide
+  `Pathfind.SetLinkHandler(label, handler)` handle `PathfindingLink` waypoints with a custom label.
+  The handler receives `(agent, from, to)` and may yield. When it returns, the agent moves on to
+  the next waypoint. If it throws, the error is reported and the agent halts with
+  `"Link:<label>"`. A per-agent handler takes priority over a module-wide one.
+- **Stats.** `Pathfind.GetStats()` returns `{ Agents, Queued, InFlight }`.
+- **New config keys.** `IDLE_RECALCULATE_INTERVAL`, `STUCK_RETRIES`, `DIRECT_PATH`,
+  `DIRECT_PATH_MAX_DISTANCE` and `DIRECT_PATH_MAX_STEP`.
+- **Exported types.** `PathfindConfig`, `PathResult`, `PathfindStats` and `LinkHandler`.
+  `ComputePathToAsync` is now typed as returning a `Promise<PathResult>`.
+
+### Fixed — `Pathfind` leaked `Heartbeat` connections
+
+Pathfind cleaned up its loops with `Keeper:Remove("PathLogic")` and `Keeper:Remove("ChaseLogic")`.
+Keeper `1.9.2` silently ignored a string key. So every repeated `Chase` added another `Heartbeat`
+connection, and `Stop` never disconnected the chase loop. Agents now clean up through a child
+Keeper and the shared scheduler.
+
+**Other fixes:**
+
+- **Stale paths.** A `Goto` inside the throttle window could still receive the path computed for the
+  previous target. `Goto`, `Chase` and `GotoAsync` now invalidate any compute in flight.
+- **Leftover visualisation.** Destroying an agent, or its entity, left waypoint parts behind in
+  `workspace`. They are now cleared.
+- **Early take-offs.** The loose advance radius applied to the final waypoint and to jump take-off
+  points, so agents jumped early and cut corners. Those waypoints now require a precise arrival.
+- **Error isolation.** An error while stepping one agent no longer breaks the frame for every other
+  agent. It is reported, and the others keep moving.
+
+### Added — `Craftsman.Inspect`
+
+`Inspect(value, settings?)` turns any value into a readable string. It replaces the private `Repr`
+module, but it is **not** a drop-in rename: `Repr` was never exported, and the settings were
+renamed.
+
+```lua
+print(Craftsman.Inspect(inventory, { Pretty = true, MaxDepth = 3 }))
+```
+
+`Settings` takes `Pretty`, `Indent`, `Semicolons`, `SortKeys`, `MaxDepth`, `MaxItems`, `Precision`,
+`FullName`, `ProperFullName`, `ClassName` and `Metamethods`.
+
+**Output differences from `Repr`:**
+
+- A cycle prints as `<cycle>`, not `{CYCLIC}`.
+- A table that appears twice without a cycle now prints in full both times. `Repr` printed
+  `{CYCLIC}` for the second one.
+- A table cut off by `MaxDepth` or `MaxItems` prints `{...}` or `<N more>`.
+- `Vector2`, `Vector3` and `UDim2` keep their decimals, to `Precision` significant digits (default
+  `7`). `Repr` printed them with `%d` and truncated them.
+
+### Changed — `Config.Configure` no longer drops `CraftsmanConfig`
+
+**What changed.** `Configure` used to merge each call over the bare defaults. So one runtime
+`Configure` call silently threw away everything `ReplicatedStorage.CraftsmanConfig` had set. Now
+every call merges over **defaults plus `CraftsmanConfig`**. Calling it twice still replaces the
+earlier call instead of stacking on it, and an omitted field returns to its `CraftsmanConfig` value.
+
+**Also fixed:**
+
+- **Arrays** are replaced whole. Before, they merged index by index, so configuring
+  `{ "A", "B", "C" }` as `{ "X" }` produced `{ "X", "B", "C" }`.
+- **Stale keys** are removed from nested sections. Before, a key survived `Configure({})`: for
+  example, an earlier `MODULE_LOAD_ORDER`. The `Config` table and its section tables keep their
+  identity, so references to `Config.TOUCH` stay live.
+
+**Types.** `Config` is typed through the new exported `Settings`, `StateMachineConfig`,
+`InterfaceConfig`, `TouchConfig`, `PathfindSchedulerConfig` and `ScaleMode` types. Three changes
+can surface as type errors:
+
+- `INTERFACE.MODE` is now `"Fit" | "Height" | "Width" | "Diagonal"`, not any `string`.
+- `MODULE_LOAD_ORDER` is `{ string }`.
+- `TOUCH.OVERLAY_OFFSET` and `STATE_MACHINE.CLIENT_UPDATE_MIN_INTERVAL` were already read at
+  runtime, and can now be set without a type error.
+
+### Changed — the `StateMachine` registries hold machines strongly
+
+The server and client registries were weak tables. A registered machine whose only reference was
+the registry could be garbage-collected, and its replication stopped with no warning. The
+registries are now strong, so a registered machine stays alive and answers `RequestState` until you
+call `Unregister`, `Unreplicate` or `Destroy`.
+
+Code that relied on dropping its last reference to clean up a machine now leaks it. Call
+`Destroy` instead.
+
+Replication targets are now typed `{ Player }?` instead of `{ any }?`. The server always treated
+them as players, so this only narrows the type.
+
+### Fixed — `Queue:Drain()` hung forever on a paused queue
+
+`Drain()` on a paused queue with jobs pending waited for `Resume()`, which might never come. It now
+resolves `false` straight away. Waiters that are already pending also resolve `false` in two cases:
+when `Pause()` is called with nothing running, and when the running job finishes while the queue is
+paused. `Drained` still fires only when the queue is truly empty.
+
+`Drain()` used to resolve only `true`, so check the value if your code assumes a drained queue.
+`QueueStats` is now an exported type, used by `GetStats()` and the `Drained` payload.
+
+### Fixed — `SoundUtil.QuickPlay` leaked its sound and part
+
+A `QuickPlay` sound was cleaned up only when it `Ended`. Stopping it, or destroying the sound or its
+temporary part, left both in `workspace`. The sound and part are now destroyed on `Ended`,
+`Stopped` or `Destroying`, and only once. The temporary part also sets `CanQuery` and `CanTouch` to
+`false`, so it no longer catches raycasts or fires `Touched`.
+
+Calling `:Stop()` on the sound `QuickPlay` returns now destroys it. It cannot be replayed.
+
+### Fixed — `TweenGroup:Cancel()` disconnected nothing
+
+The group's connections were collected into a throwaway table, never into `_Connections`, so
+`Cancel` had nothing to disconnect.
+
+### Changed — `TweenUtil` and `Spring` share one spring state
+
+`TweenUtil` used the external Spr package, and `Craftsman.Spring` was a separate vendored copy of
+the same library, each with its own state. They are now the same module. `TweenUtil.Play`,
+`PlayFrom` and `Stop` now stop a spring that `Craftsman.Spring` started on the same instance and
+property, and the reverse is also true.
+
+### Fixed — `MathUtil.Abbreviate` and `NumberToWords` edge cases
+
+- `Abbreviate` abbreviates negative numbers with a leading `-`. Before, it returned them
+  unabbreviated.
+- `Abbreviate` returns `tostring` for `math.huge` and NaN. Before, it errored.
+- `Abbreviate` caps values of `1e21` and above at the `Qn` suffix. Before, it errored.
+- `NumberToWords(math.huge)` returns `"infinity"`, and `-math.huge` returns `"minus infinity"`.
+  Before, both looped forever.
+
+### Fixed — a stray ` 2` in preload warnings
+
+`AnimationUtil` and `SoundUtil` passed a level to `PrintUtil:Warn`, which joined every argument
+into the message. Their preload warnings ended in ` 2`.
+
+### Changed — Craftsman is `--!strict` throughout
+
+Every module is `--!strict`, and the package type-checks with zero diagnostics under Luau's new
+type solver. Most of this is invisible. What you may notice:
+
+- **More exported types.** Among them: `TagAttributes`, `TagInput` and `TagConnection` on `Tag`;
+  `LoaderState` on `Component`; `MachinePayload` on `StateMachine`; `TouchButton` on `TouchUtil`.
+- **Narrower signatures that may flag existing code:**
+  - `StateMachine.State` and `Machine` are now `setmetatable<Fields, Methods>` types.
+  - `StringUtil`'s `gsub`-based functions declare the second return value they always had.
+  - A tag's `RemoveOthersAndAdd` declares the `NumberValue` it always returned.
+- **Generics.** `MathUtil.WeightedRandom`, `AsyncLock:Execute`,
+  `KeyedDebounce:Call` and `StateMachine.State.new` are now generic.
+
+None of this changes runtime behaviour.
+
+---
+
 ## 0.8.0 — unreleased
 
 Craftsman no longer requires its consumer, modules declare their own load order, the barrel

@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Pathfind.luau
     Author      > AveryArk
@@ -9,16 +9,70 @@
 const PathfindingService = game:GetService("PathfindingService")
 const RunService = game:GetService("RunService")
 
-const Keeper = require("@game/ReplicatedStorage/Packages/Keeper")
-const Promise = require("../../../Promise")
-const Signal = require("../../../Signal")
-const PrintUtil = require("./Utilities/PrintUtil")
+const Keeper = require("../packages/roblox/Keeper")
+const Promise = require("../packages/roblox/Promise")
+const Signal = require("../packages/roblox/Signal")
+const Config = require("./Config")
 const TableUtil = require("./Utilities/TableUtil")
 
+local PathfindModule = {}
+
 --
-const FALLBACK_CONFIG = {
+export type PathfindConfig = {
+	RECALCULATE_THROTTLE: number,
+	RECALCULATE_DISTANCE_THRESHOLD: number,
+	IDLE_RECALCULATE_INTERVAL: number?,
+
+	AGENT_RADIUS: number,
+	AGENT_HEIGHT: number,
+	AGENT_CAN_JUMP: boolean,
+
+	AGENT_COSTS: { [string]: number },
+
+	WAYPOINT_SPACING: number,
+	WAYPOINT_ARRIVAL_RADIUS: number,
+	WAYPOINT_ADVANCE_RADIUS: number,
+	STUCK_TIMEOUT: number,
+	STUCK_RETRIES: number?,
+	STALL_TIMEOUT: number,
+	PARTIAL_PATH: boolean,
+
+	DIRECT_PATH: boolean?,
+	DIRECT_PATH_MAX_DISTANCE: number?,
+	DIRECT_PATH_MAX_STEP: number?,
+
+	VISUALISE: boolean,
+}
+
+export type PathResult = {
+	Status: Enum.PathStatus,
+	Waypoints: { PathWaypoint },
+}
+
+export type PathfindStats = {
+	Agents: number,
+	Queued: number,
+	InFlight: number,
+}
+
+type ConfigMap = { [string]: any }
+
+type ChaseRequest = "None" | "Direct" | "Full"
+
+type PendingRequest = {
+	Resolve: () -> (),
+	Reject: (reason: string) -> (),
+	Cancel: () -> (),
+}
+
+type LinkHandlerFunction = (pathfind: any, from: PathWaypoint, to: PathWaypoint) -> ()
+--
+
+--
+const FALLBACK_CONFIG: PathfindConfig = {
 	RECALCULATE_THROTTLE = 0.2,
 	RECALCULATE_DISTANCE_THRESHOLD = 4,
+	IDLE_RECALCULATE_INTERVAL = 1,
 
 	AGENT_RADIUS = 2,
 	AGENT_HEIGHT = 5,
@@ -30,19 +84,22 @@ const FALLBACK_CONFIG = {
 	WAYPOINT_ARRIVAL_RADIUS = 1.5,
 	WAYPOINT_ADVANCE_RADIUS = 2.8,
 	STUCK_TIMEOUT = 2,
+	STUCK_RETRIES = 2,
 	STALL_TIMEOUT = 2,
 	PARTIAL_PATH = true,
+
+	DIRECT_PATH = true,
+	DIRECT_PATH_MAX_DISTANCE = 40,
+	DIRECT_PATH_MAX_STEP = 2,
 
 	VISUALISE = false,
 }
 --
 
 --
-local PathVisualisationFolder = workspace:FindFirstChild("PathVisualisation") or Instance.new("Folder")
-PathVisualisationFolder.Name = "PathVisualisation"
-PathVisualisationFolder.Parent = workspace
+local VisualisationFolder: Instance? = nil
 
-local VisualisationBallPart = Instance.new("Part")
+const VisualisationBallPart = Instance.new("Part")
 VisualisationBallPart.Name = "CFVisualisationBall"
 VisualisationBallPart.Shape = Enum.PartType.Ball
 VisualisationBallPart.Size = Vector3.new(0.35, 0.35, 0.35)
@@ -53,14 +110,14 @@ VisualisationBallPart.CanTouch = false
 VisualisationBallPart.CanQuery = false
 VisualisationBallPart.CastShadow = false
 
-local VisualisationBillboard = Instance.new("BillboardGui")
+const VisualisationBillboard = Instance.new("BillboardGui")
 VisualisationBillboard.Name = "CFVisualisationBillboard"
 VisualisationBillboard.Size = UDim2.new(0, 180, 0, 50)
 VisualisationBillboard.StudsOffset = Vector3.new(0, 0.6, 0)
 VisualisationBillboard.AlwaysOnTop = true
 VisualisationBillboard.ResetOnSpawn = false
 
-local VisualisationLabel = Instance.new("TextLabel")
+const VisualisationLabel = Instance.new("TextLabel")
 VisualisationLabel.Size = UDim2.new(1, 0, 1, 0)
 VisualisationLabel.BackgroundTransparency = 1
 VisualisationLabel.Font = Enum.Font.GothamBold
@@ -70,7 +127,7 @@ VisualisationLabel.TextStrokeTransparency = 0.4
 VisualisationLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 VisualisationLabel.Parent = VisualisationBillboard
 
-local VisualisationLine = Instance.new("Part")
+const VisualisationLine = Instance.new("Part")
 VisualisationLine.Name = "PathLine"
 VisualisationLine.Shape = Enum.PartType.Cylinder
 VisualisationLine.Material = Enum.Material.Neon
@@ -82,12 +139,11 @@ VisualisationLine.CanQuery = false
 VisualisationLine.CastShadow = false
 --
 
-local PathfindModule = {}
-
+--
 PathfindModule.Movers = {
 	Humanoid = function(humanoid: Humanoid)
 		if not humanoid or not humanoid:IsA("Humanoid") then
-			PrintUtil:Error("Invalid humanoid provided to PathfindModule.Movers.Humanoid")
+			error("Invalid humanoid provided to PathfindModule.Movers.Humanoid")
 		end
 
 		return function(destination: Vector3)
@@ -95,49 +151,273 @@ PathfindModule.Movers = {
 		end
 	end,
 }
+--
 
-local Pathfind = {}
+--
+const Pathfind = {}
 Pathfind.__index = Pathfind
+--
+
+--
+type PathfindFields = {
+	Entity: Model | BasePart,
+	Humanoid: Humanoid?,
+	Mover: (Vector3) -> (),
+	Config: PathfindConfig,
+	Keeper: Keeper.Keeper,
+	PathLogicKeeper: Keeper.Keeper,
+	Path: Path,
+	RayParams: RaycastParams,
+
+	IsModel: boolean,
+	Waypoints: { PathWaypoint },
+	TargetPosition: Vector3,
+	LastPathComputeTime: number,
+	LastAdvanceTime: number,
+	LastMovingTime: number,
+	LastRecordedPosition: Vector3,
+	PendingRecalculate: boolean,
+	Queued: boolean,
+	Computing: boolean,
+	PathComputeToken: number?,
+	CurrentWaypointIndex: number,
+	StuckCount: number,
+	ChaseTarget: (BasePart | Model)?,
+	LastChasePosition: Vector3?,
+	StoppingDistance: number?,
+	ChaseElapsed: number,
+	ActiveRequest: PendingRequest?,
+	LinkHandlers: { [string]: LinkHandlerFunction },
+
+	IsMoving: boolean,
+	Traversing: boolean,
+	DirectPath: boolean,
+	LastDirectCheck: number,
+	Destroyed: boolean,
+
+	VisualisationNodes: { [number]: Part },
+	StaleVisualisationNodes: { Part },
+	VisitedNodePositions: { [string]: boolean },
+	EntityVisualisationBillboard: BillboardGui?,
+	EntityVisualisationLabel: TextLabel?,
+
+	OnPathCalculated: Signal.Signal<{ PathWaypoint }>,
+	OnPathEnded: Signal.Signal<()>,
+	OnArrived: Signal.Signal<()>,
+	OnStuck: Signal.Signal<()>,
+	OnPathFailed: Signal.Signal<string>,
+}
+--
+
+--
+const Agents: { [any]: boolean } = {}
+const JoiningAgents: { any } = {}
+const ComputeQueue: { any } = {}
+
+local InFlightComputes = 0
+local SchedulerConnection: RBXScriptConnection? = nil
+
+const SharedLinkHandlers: { [string]: LinkHandlerFunction } = {}
+--
+
+local function normalise_config(config: PathfindConfig?): ConfigMap
+	--
+	const defaults = TableUtil.DeepClone(FALLBACK_CONFIG) :: ConfigMap
+
+	if not config then
+		return defaults
+	end
+	--
+
+	--
+	const normalised_config = {} :: ConfigMap
+
+	for key, value in defaults do
+		const override = (config :: ConfigMap)[key]
+		normalised_config[key] = if override ~= nil then override else value
+	end
+	--
+
+	return normalised_config
+end
+
+local function get_visualisation_folder(): Instance
+	--
+	if VisualisationFolder then
+		return VisualisationFolder
+	end
+	--
+
+	--
+	const folder = workspace:FindFirstChild("PathVisualisation") or Instance.new("Folder")
+	folder.Name = "PathVisualisation"
+	folder.Parent = workspace
+
+	VisualisationFolder = folder
+	--
+
+	return folder
+end
+
+local function release_network_owner(instance: Instance?)
+	--
+	if not instance or not instance:IsA("BasePart") or instance.Anchored then
+		return
+	end
+	--
+
+	pcall(instance.SetNetworkOwner, instance, nil)
+end
+
+local function release_entity_network_ownership(entity: Model | BasePart)
+	--
+	const released: { [BasePart]: boolean } = {}
+	const parts = entity:GetDescendants()
+
+	table.insert(parts, entity)
+	--
+
+	--
+	for _, part in parts do
+		if not part:IsA("BasePart") then
+			continue
+		end
+
+		const assembly_root = part.AssemblyRootPart or part
+
+		if released[assembly_root] then
+			continue
+		end
+
+		released[assembly_root] = true
+		release_network_owner(assembly_root)
+	end
+	--
+end
+
+local function create_ray_params(entity: Instance): RaycastParams
+	--
+	const params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { entity }
+	params.RespectCanCollide = true
+	params.IgnoreWater = true
+	--
+
+	return params
+end
+
+local function attach_visualisation(pathfind: PathfindFields)
+	--
+	if not pathfind.Config.VISUALISE then
+		return
+	end
+	--
+
+	--
+	const billboard = pathfind.Keeper:Add(VisualisationBillboard:Clone())
+	pathfind.EntityVisualisationBillboard = billboard
+	pathfind.EntityVisualisationLabel = billboard:FindFirstChildOfClass("TextLabel")
+	billboard.Adornee = pathfind.Entity
+	billboard.Parent = get_visualisation_folder()
+	--
+end
+
+local function take_request(agent: PathfindFields): PendingRequest?
+	--
+	const request = agent.ActiveRequest
+	agent.ActiveRequest = nil
+	--
+
+	return request
+end
+
+local function resolve_request(agent: PathfindFields)
+	--
+	const request = take_request(agent)
+
+	if not request then
+		return
+	end
+	--
+
+	request.Resolve()
+end
+
+local function reject_request(agent: PathfindFields, reason: string)
+	--
+	const request = take_request(agent)
+
+	if not request then
+		return
+	end
+	--
+
+	request.Reject(reason)
+end
+
+local function cancel_request(agent: PathfindFields)
+	--
+	const request = take_request(agent)
+
+	if not request then
+		return
+	end
+	--
+
+	request.Cancel()
+end
+
+local function unregister_agent(agent: PathfindFields)
+	--
+	agent.Destroyed = true
+	agent.Queued = false
+	agent.PendingRecalculate = false
+
+	Agents[agent] = nil
+	--
+
+	cancel_request(agent)
+end
 
 local function new(param: {
 	Entity: Model | BasePart,
 	Humanoid: Humanoid?,
 
-	Mover: (Vector3) -> (),
+	Mover: ((Vector3) -> ())?,
 
-	Config: typeof(FALLBACK_CONFIG)?,
+	Config: PathfindConfig?,
 })
-	local self = setmetatable({}, Pathfind)
+	--
+	const mover = param.Mover or if param.Humanoid then PathfindModule.Movers.Humanoid(param.Humanoid) else nil
+
+	if not mover then
+		error("Pathfind.new requires a Mover or a Humanoid", 2)
+	end
+	--
 
 	--
+	const self = setmetatable({} :: PathfindFields, Pathfind)
+
 	self.Entity = param.Entity
 	self.Humanoid = param.Humanoid
-
-	self.Mover = param.Mover
-
-	if self.Humanoid then
-		self.Mover = self.Mover or PathfindModule.Movers.Humanoid(self.Humanoid)
-	end
+	self.Mover = mover
 	--
 
 	--
-	local normalised_config = {} :: typeof(FALLBACK_CONFIG)
-
-	if param.Config then
-		for key, value in TableUtil.DeepClone(FALLBACK_CONFIG) do
-			local override = param.Config[key]
-			normalised_config[key] = if override ~= nil then override else value
-		end
-	else
-		normalised_config = TableUtil.DeepClone(FALLBACK_CONFIG)
-	end
-
-	self.Config = normalised_config
+	self.Config = normalise_config(param.Config) :: PathfindConfig
 	--
 
 	--
 	self.Keeper = Keeper.new()
 	self.Keeper:AttachToInstance(self.Entity)
+
+	self.PathLogicKeeper = self.Keeper:Extend()
+
+	self.Keeper:Add(function()
+		unregister_agent(self)
+		self:_ClearVisualisationNodes()
+	end)
 	--
 
 	--
@@ -153,6 +433,8 @@ local function new(param: {
 			SupportPartialPath = self.Config.PARTIAL_PATH,
 		},
 	})
+
+	self.RayParams = create_ray_params(self.Entity)
 	--
 
 	--
@@ -164,61 +446,44 @@ local function new(param: {
 	self.LastMovingTime = os.clock()
 	self.LastRecordedPosition = self.TargetPosition
 	self.PendingRecalculate = false
+	self.Queued = false
+	self.Computing = false
 	self.CurrentWaypointIndex = 1
+	self.StuckCount = 0
 	self.ChaseTarget = nil :: (BasePart | Model)?
 	self.LastChasePosition = nil :: Vector3?
+	self.StoppingDistance = nil :: number?
+	self.ChaseElapsed = 0
+	self.ActiveRequest = nil :: PendingRequest?
+	self.LinkHandlers = {}
 
 	self.IsMoving = false
+	self.Traversing = false
+	self.DirectPath = false
+	self.LastDirectCheck = 0
 	self.Destroyed = false
 
 	self.VisualisationNodes = {}
 	self.StaleVisualisationNodes = {}
 	self.VisitedNodePositions = {}
+	--
 
+	--
 	if RunService:IsServer() then
-		local root = self:GetRoot()
-		if root and root:IsA("BasePart") and not root.Anchored then
-			pcall(root.SetNetworkOwner, root, nil)
-		end
-
-		for _, part in self.Entity:GetDescendants() do
-			if part:IsA("BasePart") and not part.Anchored then
-				pcall(part.SetNetworkOwner, part, nil)
-			end
-		end
-
-		if self.Entity:IsA("BasePart") and not self.Entity.Anchored then
-			pcall(self.Entity.SetNetworkOwner, self.Entity, nil)
-		end
+		release_entity_network_ownership(self.Entity)
 	end
 	--
 
-	if self.Config.VISUALISE then
-		--
-		self.EntityVisualisationBillboard = self.Keeper:Add(VisualisationBillboard:Clone())
-		self.EntityVisualisationLabel = self.EntityVisualisationBillboard:FindFirstChildOfClass("TextLabel")
-		self.EntityVisualisationBillboard.Adornee = self.Entity
-		self.EntityVisualisationBillboard.Parent = PathVisualisationFolder
-		--
-
-		--
-		self.Keeper:Connect(RunService.Heartbeat, function()
-			local target_name = self.ChaseTarget and self.ChaseTarget.Name or "None"
-			local target_x = math.round(self.TargetPosition.X * 100) / 100
-			local target_y = math.round(self.TargetPosition.Y * 100) / 100
-			local target_z = math.round(self.TargetPosition.Z * 100) / 100
-
-			self.EntityVisualisationLabel.Text = `ChaseTarget: {target_name}\n`
-				.. `CurrentWayPointIndex: {self.CurrentWaypointIndex}\n`
-				.. `TargetPosition: {target_x}, {target_y}, {target_z}\n`
-				.. `IsMoving: {self.IsMoving}`
-		end, "VisualisationLogic")
-		--
-	end
+	--
+	attach_visualisation(self)
+	--
 
 	--
 	self.OnPathCalculated = self.Keeper:Construct(Signal.new)
 	self.OnPathEnded = self.Keeper:Construct(Signal.new)
+	self.OnArrived = self.Keeper:Construct(Signal.new)
+	self.OnStuck = self.Keeper:Construct(Signal.new)
+	self.OnPathFailed = self.Keeper:Construct(Signal.new)
 	--
 
 	--
@@ -228,7 +493,11 @@ local function new(param: {
 	return self
 end
 
+--
 export type Pathfind = typeof(new(...))
+
+export type LinkHandler = (pathfind: Pathfind, from: PathWaypoint, to: PathWaypoint) -> ()
+--
 
 function Pathfind._ClearVisualisationNodes(self: Pathfind)
 	--
@@ -242,6 +511,7 @@ function Pathfind._ClearVisualisationNodes(self: Pathfind)
 		for _, node in self.VisualisationNodes do
 			node:Destroy()
 		end
+
 		self.VisualisationNodes = {}
 	end
 
@@ -249,6 +519,7 @@ function Pathfind._ClearVisualisationNodes(self: Pathfind)
 		for _, node in self.StaleVisualisationNodes do
 			node:Destroy()
 		end
+
 		self.StaleVisualisationNodes = {}
 	end
 	--
@@ -256,48 +527,200 @@ function Pathfind._ClearVisualisationNodes(self: Pathfind)
 	self.VisitedNodePositions = {}
 end
 
-function Pathfind.GetRoot(self: Pathfind)
+function Pathfind.GetRoot(self: Pathfind): BasePart?
+	--
 	if not self.IsModel then
-		return self.Entity
+		return self.Entity :: BasePart
 	end
+	--
 
-	return self.Entity.PrimaryPart or self.Entity:FindFirstChild("HumanoidRootPart")
+	return self.Entity.PrimaryPart or self.Entity:FindFirstChild("HumanoidRootPart") :: BasePart?
 end
 
-function Pathfind.GetCurrentPosition(self: Pathfind)
+function Pathfind.GetCurrentPosition(self: Pathfind): Vector3
+	--
 	if not self.IsModel then
 		return self.Entity.Position
 	end
+	--
 
 	return self.Entity.PrimaryPart and self.Entity.PrimaryPart.CFrame.Position or self.Entity:GetPivot().Position
 end
 
---
 local function position_key(position: Vector3): string
-	local x = math.round(position.X * 10) / 10
-	local y = math.round(position.Y * 10) / 10
-	local z = math.round(position.Z * 10) / 10
+	--
+	const x = math.round(position.X * 10) / 10
+	const y = math.round(position.Y * 10) / 10
+	const z = math.round(position.Z * 10) / 10
+	--
 
 	return `{x},{y},{z}`
 end
---
 
-function Pathfind._ExecuteWaypoint(self: Pathfind)
+local function mark_visited(visited_positions: { [string]: boolean }, waypoint: PathWaypoint?)
 	--
-	if self.Config.VISUALISE then
-		local just_reached = self.Waypoints[self.CurrentWaypointIndex - 1]
-		if just_reached then
-			self.VisitedNodePositions[position_key(just_reached.Position)] = true
-		end
+	if not waypoint then
+		return
 	end
+	--
 
 	--
-	local waypoint = self.Waypoints[self.CurrentWaypointIndex]
+	visited_positions[position_key(waypoint.Position)] = true
+	--
+end
+
+local function set_ray_filter(pathfind: Pathfind, target: Instance?)
+	pathfind.RayParams.FilterDescendantsInstances = if target then { pathfind.Entity, target } else { pathfind.Entity }
+end
+
+local function get_arrival_threshold(pathfind: Pathfind): number
+	return math.max(pathfind.Config.WAYPOINT_ARRIVAL_RADIUS, pathfind.Config.AGENT_RADIUS)
+end
+
+local function reaches_target(pathfind: Pathfind, position: Vector3): boolean
+	--
+	const offset = position - pathfind.TargetPosition
+	--
+
+	return Vector3.new(offset.X, 0, offset.Z).Magnitude <= get_arrival_threshold(pathfind)
+end
+
+local function fail_request(pathfind: Pathfind, reason: string)
+	--
+	pathfind.OnPathFailed:Fire(reason)
+	--
+
+	--
+	if pathfind.IsMoving then
+		return
+	end
+	--
+
+	reject_request(pathfind, reason)
+end
+
+local function finish_path(pathfind: Pathfind)
+	--
+	const final_waypoint = pathfind.Waypoints[#pathfind.Waypoints]
+	pathfind.IsMoving = false
+	--
+
+	--
+	pathfind.OnPathEnded:Fire()
+	--
+
+	--
+	if not final_waypoint or not reaches_target(pathfind, final_waypoint.Position) then
+		fail_request(pathfind, "Unreachable")
+		return
+	end
+	--
+
+	--
+	pathfind.OnArrived:Fire()
+	--
+
+	resolve_request(pathfind)
+end
+
+local function halt(pathfind: Pathfind)
+	--
+	const current_position = pathfind:GetCurrentPosition()
+
+	pathfind.IsMoving = false
+	pathfind.DirectPath = false
+	pathfind.Waypoints = {}
+	pathfind.CurrentWaypointIndex = 1
+	pathfind.PendingRecalculate = false
+	pathfind.Queued = false
+	pathfind.LastAdvanceTime = os.clock()
+	pathfind.LastMovingTime = os.clock()
+	pathfind.LastRecordedPosition = current_position
+	pathfind.PathComputeToken = (pathfind.PathComputeToken or 0) + 1
+	--
+
+	--
+	pathfind.OnPathEnded:Fire()
+
+	pathfind.Mover(current_position)
+	--
+end
+
+local function get_link_handler(pathfind: Pathfind, waypoint: PathWaypoint?): LinkHandlerFunction?
+	--
+	if not waypoint or waypoint.Action ~= Enum.PathWaypointAction.Custom then
+		return nil
+	end
+	--
+
+	return pathfind.LinkHandlers[waypoint.Label] or SharedLinkHandlers[waypoint.Label]
+end
+
+local function traverse_link(pathfind: Pathfind, handler: LinkHandlerFunction, from: PathWaypoint, to: PathWaypoint)
+	--
+	const token = pathfind.PathComputeToken
+	pathfind.Traversing = true
+	--
+
+	task.spawn(function()
+		--
+		local failure: string? = nil
+
+		xpcall(handler, function(err)
+			failure = debug.traceback(tostring(err), 2)
+		end, pathfind, from, to)
+
+		pathfind.Traversing = false
+
+		if pathfind.Destroyed or pathfind.PathComputeToken ~= token then
+			return
+		end
+		--
+
+		--
+		if failure then
+			task.spawn(error, failure, 0)
+			halt(pathfind)
+			fail_request(pathfind, `Link:{from.Label}`)
+			return
+		end
+		--
+
+		--
+		pathfind.CurrentWaypointIndex += 1
+		pathfind.StuckCount = 0
+		pathfind.LastMovingTime = os.clock()
+		pathfind.LastRecordedPosition = pathfind:GetCurrentPosition()
+		--
+
+		pathfind:_ExecuteWaypoint()
+	end)
+end
+
+function Pathfind._ExecuteWaypoint(self: Pathfind): boolean
+	--
+	const reached = self.Waypoints[self.CurrentWaypointIndex - 1]
+
+	if self.Config.VISUALISE then
+		mark_visited(self.VisitedNodePositions, reached)
+	end
+	--
+
+	--
+	const waypoint = self.Waypoints[self.CurrentWaypointIndex]
 
 	if not waypoint then
-		self.IsMoving = false
-		self.OnPathEnded:Fire()
+		finish_path(self)
 		return false
+	end
+	--
+
+	--
+	const link_handler = get_link_handler(self, reached)
+
+	if link_handler then
+		traverse_link(self, link_handler, reached, waypoint)
+		return true
 	end
 	--
 
@@ -318,159 +741,63 @@ function Pathfind._ExecuteWaypoint(self: Pathfind)
 	return true
 end
 
---
-local PathLogiCleanupKey = "PathLogic"
-
-function Pathfind.ConnectPathLogic(self: Pathfind)
+local function advance(pathfind: Pathfind): boolean
 	--
-	self.Keeper:Remove(PathLogiCleanupKey)
+	pathfind.StuckCount = 0
 	--
 
-	self.Keeper:Connect(self.Path.Blocked, function(blocked_waypoint_index)
-		--
-		if not self.IsMoving then
-			return
-		end
-		--
-
-		--
-		if blocked_waypoint_index < self.CurrentWaypointIndex - 1 then
-			return
-		end
-		--
-
-		--
-
-		self:RecalculatePath()
-	end, PathLogiCleanupKey)
-
-	self.Keeper:Connect(RunService.Heartbeat, function()
-		--
-		if self.PendingRecalculate then
-			self:RecalculatePath()
-		end
-		--
-
-		--
-		if not self.IsMoving then
-			return
-		end
-		--
-
-		--
-		local current_position = self:GetCurrentPosition()
-		local waypoint = self.Waypoints[self.CurrentWaypointIndex - 1]
-
-		if not waypoint then
-			self:_ExecuteWaypoint()
-			return
-		end
-		--
-
-		--
-		local diff = waypoint.Position - current_position
-		local dist = Vector3.new(diff.X, 0, diff.Z).Magnitude
-		local is_final_waypoint = (self.Waypoints[self.CurrentWaypointIndex] == nil)
-		local arrival_threshold = if is_final_waypoint
-			then self.Config.WAYPOINT_ARRIVAL_RADIUS
-			else math.min(self.Config.WAYPOINT_ADVANCE_RADIUS or 2.8, self.Config.WAYPOINT_SPACING * 0.75)
-
-		if dist < arrival_threshold and math.abs(diff.Y) <= self.Config.AGENT_HEIGHT then
-			self:_ExecuteWaypoint()
-			return
-		end
-		--
-
-		--
-		local root_part = self:GetRoot()
-		local velocity = root_part and root_part.AssemblyLinearVelocity or Vector3.zero
-		local vel_normalised = Vector3.new(velocity.X, 0, velocity.Z)
-		local speed = vel_normalised.Magnitude
-		local dist_moved = (current_position - (self.LastRecordedPosition or current_position)).Magnitude
-
-		if speed > 1 or dist_moved > 0.1 then
-			self.LastMovingTime = os.clock()
-			self.LastRecordedPosition = current_position
-		end
-
-		local stuck_timeout = self.Config.STUCK_TIMEOUT or self.Config.STALL_TIMEOUT or 2
-
-		--
-		if os.clock() - self.LastMovingTime > stuck_timeout then
-			self.LastMovingTime = os.clock()
-			self.LastAdvanceTime = os.clock()
-			self.LastRecordedPosition = current_position
-			self:RecalculatePath()
-			return
-		end
-		--
-
-		if not root_part or diff.Magnitude <= 0 then
-			return
-		end
-		--
-
-		if vel_normalised.Magnitude <= 1 then
-			return
-		end
-		--
-
-		--
-		if dist <= arrival_threshold * 1.5 and math.abs(diff.Y) <= self.Config.AGENT_HEIGHT then
-			local dirc_to_wp = Vector3.new(diff.X, 0, diff.Z).Unit
-			local move_dirc = vel_normalised.Unit
-
-			if dirc_to_wp:Dot(move_dirc) < 0 then
-				self:_ExecuteWaypoint()
-			end
-		end
-		--
-	end, PathLogiCleanupKey)
-
-	if self.Humanoid then
-		self.Keeper:Connect(self.Humanoid.MoveToFinished, function(reached)
-			if not self.IsMoving then
-				return
-			end
-
-			if reached then
-				--
-				self:_ExecuteWaypoint()
-			end
-		end, PathLogiCleanupKey)
-	end
-
-	self.OnPathCalculated:Connect(function(waypoints)
-		self.IsMoving = true
-		self:_ExecuteWaypoint()
-	end, PathLogiCleanupKey)
-
-	self.OnPathEnded:Connect(function()
-		self:_ClearVisualisationNodes()
-	end, PathLogiCleanupKey)
+	return pathfind:_ExecuteWaypoint()
 end
---
 
-function Pathfind.ComputePathToAsync(self: Pathfind, target_position: Vector3)
+local function recover_from_stuck(pathfind: Pathfind, current_position: Vector3)
 	--
-	return Promise.new(function(resolve)
-		local current_position = self:GetCurrentPosition()
+	pathfind.StuckCount += 1
+	pathfind.LastMovingTime = os.clock()
+	pathfind.LastAdvanceTime = os.clock()
+	pathfind.LastRecordedPosition = current_position
+	--
 
+	--
+	if pathfind.StuckCount > (pathfind.Config.STUCK_RETRIES :: number) then
+		pathfind.StuckCount = 0
+		halt(pathfind)
+		pathfind.OnStuck:Fire()
+		reject_request(pathfind, "Stuck")
+		return
+	end
+	--
+
+	--
+	if pathfind.Humanoid then
+		pathfind.Humanoid.Jump = true
+	end
+	--
+
+	pathfind:RecalculatePath()
+end
+
+function Pathfind.ComputePathToAsync(self: Pathfind, target_position: Vector3): Promise.TypedPromise<PathResult>
+	return Promise.new(function(resolve)
 		--
+		const current_position = self:GetCurrentPosition()
+
 		self.Path:ComputeAsync(current_position, target_position)
 		--
 
 		resolve({ Status = self.Path.Status, Waypoints = self.Path:GetWaypoints() })
 	end)
-	--
 end
 
 function Pathfind._UpdateVisualisation(self: Pathfind)
+	--
 	if not self.Config.VISUALISE then
 		return
 	end
+	--
 
-	local new_nodes = {}
+	--
+	const new_nodes: { [number]: Part } = {}
+	const folder = get_visualisation_folder()
 
 	local function was_visited(node: Part): boolean
 		return self.VisitedNodePositions[position_key(node.Position)] == true
@@ -483,20 +810,19 @@ function Pathfind._UpdateVisualisation(self: Pathfind)
 
 		node.Color = Color3.fromRGB(255, 0, 0)
 
-		--
-		local line = node:FindFirstChild("PathLine")
+		const line = node:FindFirstChild("PathLine") :: Part?
 
 		if not line then
 			return
 		end
-		--
 
 		line.Color = Color3.fromRGB(255, 0, 0)
 	end
+	--
 
 	for i, wp in self.Waypoints do
 		--
-		local old_node = self.VisualisationNodes[i]
+		const old_node = self.VisualisationNodes[i]
 		local is_different = true
 
 		if old_node and (old_node.Position - wp.Position).Magnitude < 0.1 then
@@ -523,9 +849,9 @@ function Pathfind._UpdateVisualisation(self: Pathfind)
 		--
 
 		--
-		local new_node = VisualisationBallPart:Clone()
+		const new_node = VisualisationBallPart:Clone()
 		new_node.Position = wp.Position
-		new_node.Parent = PathVisualisationFolder
+		new_node.Parent = folder
 		new_nodes[i] = new_node
 		--
 
@@ -536,229 +862,845 @@ function Pathfind._UpdateVisualisation(self: Pathfind)
 		--
 
 		--
-		local prev_wp = self.Waypoints[i - 1]
-		local p1 = prev_wp.Position
-		local p2 = wp.Position
-		local dist = (p2 - p1).Magnitude
+		const prev_wp = self.Waypoints[i - 1]
+		const p1 = prev_wp.Position
+		const p2 = wp.Position
+		const dist = (p2 - p1).Magnitude
 
-		local line = VisualisationLine:Clone()
+		const line = VisualisationLine:Clone()
 		line.Size = Vector3.new(dist, 0.1, 0.1)
 		line.CFrame = CFrame.lookAt(p1, p2) * CFrame.new(0, 0, -dist / 2) * CFrame.Angles(0, math.pi / 2, 0)
 		line.Parent = new_node
 		--
 	end
 
+	--
 	for _, old_node in self.VisualisationNodes do
 		apply_blocked_color(old_node)
 		table.insert(self.StaleVisualisationNodes, old_node)
 	end
+	--
 
 	self.VisualisationNodes = new_nodes
 end
 
-function Pathfind.RecalculatePath(self: Pathfind)
+local function update_visualisation_label(pathfind: Pathfind)
+	--
+	const label = pathfind.EntityVisualisationLabel
+
+	if not label then
+		return
+	end
+	--
+
+	--
+	const target_name = pathfind.ChaseTarget and pathfind.ChaseTarget.Name or "None"
+	const target_x = math.round(pathfind.TargetPosition.X * 100) / 100
+	const target_y = math.round(pathfind.TargetPosition.Y * 100) / 100
+	const target_z = math.round(pathfind.TargetPosition.Z * 100) / 100
+	--
+
+	label.Text =
+		`ChaseTarget: {target_name}\nCurrentWayPointIndex: {pathfind.CurrentWaypointIndex}\nTargetPosition: {target_x}, {target_y}, {target_z}\nIsMoving: {pathfind.IsMoving}`
+end
+
+local function is_usable_result(pathfind: Pathfind, result: PathResult): boolean
+	--
+	if #result.Waypoints == 0 then
+		return false
+	end
+	--
+
+	return result.Status == Enum.PathStatus.Success or pathfind.Config.PARTIAL_PATH
+end
+
+local function apply_path_result(pathfind: Pathfind, result: PathResult, token: number, is_direct: boolean)
+	--
+	if pathfind.Destroyed or pathfind.PathComputeToken ~= token then
+		return
+	end
+
+	if not is_usable_result(pathfind, result) then
+		fail_request(pathfind, result.Status.Name)
+		return
+	end
+	--
+
+	--
+	const current_pos = pathfind:GetCurrentPosition()
+	const threshold = get_arrival_threshold(pathfind)
+
+	pathfind.Waypoints = result.Waypoints
+	pathfind.DirectPath = is_direct
+	pathfind.LastDirectCheck = os.clock()
+	pathfind.CurrentWaypointIndex = 1
+	pathfind.LastAdvanceTime = os.clock()
+	pathfind.LastMovingTime = os.clock()
+	pathfind.LastRecordedPosition = current_pos
+	--
+
+	--
+	while pathfind.CurrentWaypointIndex < #pathfind.Waypoints do
+		const wp = pathfind.Waypoints[pathfind.CurrentWaypointIndex]
+		const dist = Vector3.new(wp.Position.X - current_pos.X, 0, wp.Position.Z - current_pos.Z).Magnitude
+
+		if dist > threshold then
+			break
+		end
+
+		pathfind.CurrentWaypointIndex += 1
+	end
+	--
+
+	--
+	pathfind.OnPathCalculated:Fire(pathfind.Waypoints)
+
+	pathfind:_UpdateVisualisation()
+	--
+end
+
+local function probe_ground(pathfind: Pathfind, origin: Vector3, planar: Vector3): Vector3?
+	--
+	const config = pathfind.Config
+	const distance = planar.Magnitude
+	const direction = planar.Unit
+	const spacing = math.max(config.AGENT_RADIUS, 1)
+	const drop = Vector3.new(0, -config.AGENT_HEIGHT * 2, 0)
+	const max_step = config.DIRECT_PATH_MAX_STEP :: number
+
+	local previous_height: number? = nil
+	local ground: Vector3? = nil
+	--
+
+	--
+	for step = 0, math.ceil(distance / spacing) do
+		const sample = origin + direction * math.min(step * spacing, distance)
+		const hit = workspace:Raycast(sample, drop, pathfind.RayParams)
+
+		if not hit then
+			return nil
+		end
+
+		if previous_height and math.abs(hit.Position.Y - previous_height) > max_step then
+			return nil
+		end
+
+		previous_height = hit.Position.Y
+		ground = hit.Position
+	end
+	--
+
+	return ground
+end
+
+local function is_line_blocked(pathfind: Pathfind, origin: Vector3, planar: Vector3): boolean
+	return workspace:Spherecast(origin, pathfind.Config.AGENT_RADIUS * 0.75, planar, pathfind.RayParams) ~= nil
+end
+
+local function is_direct_line_blocked(pathfind: Pathfind): boolean
+	--
+	const clock = os.clock()
+
+	if not pathfind.DirectPath or clock - pathfind.LastDirectCheck < pathfind.Config.RECALCULATE_THROTTLE then
+		return false
+	end
+
+	pathfind.LastDirectCheck = clock
+	--
+
+	--
+	const root = pathfind:GetRoot()
+	const destination = pathfind.Waypoints[#pathfind.Waypoints]
+
+	if not root or not destination then
+		return false
+	end
+	--
+
+	--
+	const offset = destination.Position - root.Position
+	const planar = Vector3.new(offset.X, 0, offset.Z)
+
+	if planar.Magnitude <= pathfind.Config.AGENT_RADIUS then
+		return false
+	end
+	--
+
+	return is_line_blocked(pathfind, root.Position, planar)
+end
+
+local function try_direct_path(pathfind: Pathfind): PathResult?
+	--
+	const config = pathfind.Config
+
+	if not config.DIRECT_PATH or next(config.AGENT_COSTS) ~= nil then
+		return nil
+	end
+
+	const root = pathfind:GetRoot()
+
+	if not root then
+		return nil
+	end
+	--
+
+	--
+	const origin = root.Position
+	const offset = pathfind.TargetPosition - origin
+	const planar = Vector3.new(offset.X, 0, offset.Z)
+	const distance = planar.Magnitude
+
+	if distance < 0.1 or distance > (config.DIRECT_PATH_MAX_DISTANCE :: number) then
+		return nil
+	end
+
+	if math.abs(offset.Y) > config.AGENT_HEIGHT then
+		return nil
+	end
+	--
+
+	--
+	if is_line_blocked(pathfind, origin, planar) then
+		return nil
+	end
+
+	const ground = probe_ground(pathfind, origin, planar)
+
+	if not ground then
+		return nil
+	end
+	--
+
+	return {
+		Status = Enum.PathStatus.Success,
+		Waypoints = { PathWaypoint.new(ground, Enum.PathWaypointAction.Walk) },
+	}
+end
+
+local function start_compute(pathfind: Pathfind)
+	--
+	pathfind.Queued = false
+	pathfind.Computing = true
+	pathfind.LastPathComputeTime = os.clock()
+	pathfind.PathComputeToken = (pathfind.PathComputeToken or 0) + 1
+
+	InFlightComputes += 1
+
+	const token = pathfind.PathComputeToken :: number
+	--
+
+	pathfind
+		:ComputePathToAsync(pathfind.TargetPosition)
+		:andThen(function(result)
+			apply_path_result(pathfind, result, token, false)
+		end)
+		:catch(function(err)
+			--
+			if pathfind.Destroyed or pathfind.PathComputeToken ~= token then
+				return
+			end
+			--
+
+			fail_request(pathfind, tostring(err))
+		end)
+		:finally(function()
+			InFlightComputes -= 1
+			pathfind.Computing = false
+		end)
+end
+
+local function dispatch_computes()
+	--
+	const settings = Config.PATHFIND
+	local budget = settings.MAX_COMPUTES_PER_FRAME
+	--
+
+	--
+	while budget > 0 and InFlightComputes < settings.MAX_CONCURRENT_COMPUTES do
+		const pathfind = table.remove(ComputeQueue, 1)
+
+		if pathfind == nil then
+			break
+		end
+
+		if pathfind.Destroyed or not pathfind.Queued then
+			continue
+		end
+
+		budget -= 1
+		start_compute(pathfind)
+	end
+	--
+end
+
+local function request_path(pathfind: Pathfind, direct_only: boolean)
+	--
+	if pathfind.Destroyed then
+		return
+	end
+
+	if pathfind.Queued then
+		pathfind.PendingRecalculate = false
+		return
+	end
+	--
+
+	--
+	const clock = os.clock()
+	const busy = pathfind.Computing or pathfind.Traversing
+
+	if busy or clock - pathfind.LastPathComputeTime < pathfind.Config.RECALCULATE_THROTTLE then
+		pathfind.PendingRecalculate = pathfind.PendingRecalculate or not direct_only
+		return
+	end
+	--
+
+	--
+	const direct_result = try_direct_path(pathfind)
+
+	if direct_result then
+		pathfind.PendingRecalculate = false
+		pathfind.LastPathComputeTime = clock
+		pathfind.PathComputeToken = (pathfind.PathComputeToken or 0) + 1
+		apply_path_result(pathfind, direct_result, pathfind.PathComputeToken :: number, true)
+		return
+	end
+
+	if direct_only then
+		return
+	end
+	--
+
+	--
+	pathfind.PendingRecalculate = false
+	pathfind.Queued = true
+	table.insert(ComputeQueue, pathfind)
+	--
+end
+
+local function get_chase_request(pathfind: Pathfind, target_position: Vector3): ChaseRequest
+	--
+	if pathfind.Computing or pathfind.Queued or pathfind.Traversing then
+		return "None"
+	end
+
+	if not pathfind.LastChasePosition then
+		return "Full"
+	end
+
+	if (target_position - pathfind.LastChasePosition).Magnitude > pathfind.Config.RECALCULATE_DISTANCE_THRESHOLD then
+		return "Full"
+	end
+
+	if pathfind.IsMoving then
+		return "None"
+	end
+
+	if os.clock() - pathfind.LastPathComputeTime >= (pathfind.Config.IDLE_RECALCULATE_INTERVAL :: number) then
+		return "Full"
+	end
+	--
+
+	return "Direct"
+end
+
+local function resolve_target_position(target: BasePart | Model): Vector3
+	--
+	if not target:IsA("Model") then
+		return target.CFrame.Position
+	end
+	--
+
+	--
+	if not target.PrimaryPart then
+		return target:GetPivot().Position
+	end
+	--
+
+	return target.PrimaryPart.CFrame.Position
+end
+
+local function is_target_alive(target: BasePart | Model): boolean
+	--
+	if not target.Parent then
+		return false
+	end
+
+	if not target:IsA("Model") then
+		return true
+	end
+	--
+
+	--
+	const humanoid = target:FindFirstChildOfClass("Humanoid")
+	--
+
+	return humanoid == nil or humanoid.Health > 0
+end
+
+local function step_chase(pathfind: Pathfind, dt: number)
+	--
+	const chase_target = pathfind.ChaseTarget
+
+	if not chase_target then
+		return
+	end
+	--
+
+	--
+	pathfind.ChaseElapsed += dt
+
+	if pathfind.ChaseElapsed < pathfind.Config.RECALCULATE_THROTTLE then
+		return
+	end
+
+	pathfind.ChaseElapsed = 0
+	--
+
+	--
+	if not is_target_alive(chase_target) then
+		pathfind:Stop()
+		return
+	end
+	--
+
+	--
+	const target_pos = resolve_target_position(chase_target)
+	const current_position = pathfind:GetCurrentPosition()
+	const stopping_distance = pathfind.StoppingDistance
+	const in_stopping_range = stopping_distance and (target_pos - current_position).Magnitude <= stopping_distance
+
+	if in_stopping_range and not pathfind.IsMoving then
+		return
+	end
+	--
+
+	--
+	if in_stopping_range then
+		halt(pathfind)
+		pathfind.OnArrived:Fire()
+		return
+	end
+	--
+
+	--
+	const request = get_chase_request(pathfind, target_pos)
+
+	if request == "None" then
+		return
+	end
+	--
+
+	--
+	pathfind.LastChasePosition = target_pos
+	pathfind.TargetPosition = target_pos
+	--
+
+	request_path(pathfind, request == "Direct")
+end
+
+local function is_airborne(pathfind: Pathfind): boolean
+	--
+	const humanoid = pathfind.Humanoid
+
+	if not humanoid then
+		return false
+	end
+	--
+
+	return humanoid.FloorMaterial == Enum.Material.Air
+end
+
+local function needs_precise_arrival(pathfind: Pathfind): boolean
+	--
+	const next_waypoint = pathfind.Waypoints[pathfind.CurrentWaypointIndex]
+
+	if not next_waypoint then
+		return true
+	end
+	--
+
+	return next_waypoint.Action == Enum.PathWaypointAction.Jump
+end
+
+local function step_movement(pathfind: Pathfind)
+	--
+	if pathfind.Traversing then
+		return
+	end
+
+	if pathfind.PendingRecalculate then
+		pathfind:RecalculatePath()
+	end
+	--
+
+	--
+	if not pathfind.IsMoving then
+		return
+	end
+	--
+
+	--
+	const current_position = pathfind:GetCurrentPosition()
+	const waypoint = pathfind.Waypoints[pathfind.CurrentWaypointIndex - 1]
+
+	if not waypoint then
+		pathfind:_ExecuteWaypoint()
+		return
+	end
+	--
+
+	--
+	if is_airborne(pathfind) then
+		pathfind.LastMovingTime = os.clock()
+		pathfind.LastRecordedPosition = current_position
+		return
+	end
+
+	if is_direct_line_blocked(pathfind) then
+		request_path(pathfind, false)
+		return
+	end
+	--
+
+	--
+	const config = pathfind.Config
+	const diff = waypoint.Position - current_position
+	const dist = Vector3.new(diff.X, 0, diff.Z).Magnitude
+	const needs_precision = needs_precise_arrival(pathfind)
+	const arrival_threshold = if needs_precision
+		then config.WAYPOINT_ARRIVAL_RADIUS
+		else math.min(config.WAYPOINT_ADVANCE_RADIUS or 2.8, config.WAYPOINT_SPACING * 0.75)
+
+	if dist < arrival_threshold and math.abs(diff.Y) <= config.AGENT_HEIGHT then
+		advance(pathfind)
+		return
+	end
+	--
+
+	--
+	const root_part = pathfind:GetRoot()
+	const velocity = root_part and root_part.AssemblyLinearVelocity or Vector3.zero
+	const vel_normalised = Vector3.new(velocity.X, 0, velocity.Z)
+	const speed = vel_normalised.Magnitude
+	const dist_moved = (current_position - (pathfind.LastRecordedPosition or current_position)).Magnitude
+
+	if speed > 1 or dist_moved > 0.1 then
+		pathfind.LastMovingTime = os.clock()
+		pathfind.LastRecordedPosition = current_position
+	end
+	--
+
+	--
+	const stuck_timeout = config.STUCK_TIMEOUT or config.STALL_TIMEOUT or 2
+
+	if os.clock() - pathfind.LastMovingTime > stuck_timeout then
+		recover_from_stuck(pathfind, current_position)
+		return
+	end
+	--
+
+	--
+	if needs_precision or not root_part or diff.Magnitude <= 0 then
+		return
+	end
+
+	if speed <= 1 then
+		return
+	end
+
+	if not (dist <= arrival_threshold * 1.5 and math.abs(diff.Y) <= config.AGENT_HEIGHT) then
+		return
+	end
+	--
+
+	--
+	const dirc_to_wp = Vector3.new(diff.X, 0, diff.Z).Unit
+	const move_dirc = vel_normalised.Unit
+
+	if not (dirc_to_wp:Dot(move_dirc) < 0) then
+		return
+	end
+	--
+
+	advance(pathfind)
+end
+
+local function step_agent(pathfind: Pathfind, dt: number)
+	--
+	if pathfind.Destroyed then
+		Agents[pathfind] = nil
+		return
+	end
+	--
+
+	--
+	step_chase(pathfind, dt)
+	step_movement(pathfind)
+	--
+
+	--
+	if pathfind.Config.VISUALISE then
+		update_visualisation_label(pathfind)
+	end
+	--
+end
+
+local function report_step_error(err: any)
+	task.spawn(error, debug.traceback(tostring(err), 2), 0)
+end
+
+local function stop_scheduler()
+	--
+	const connection = SchedulerConnection
+
+	if not connection then
+		return
+	end
+	--
+
+	--
+	connection:Disconnect()
+	SchedulerConnection = nil
+	--
+end
+
+local function step_scheduler(dt: number)
+	--
+	for _, pathfind in JoiningAgents do
+		if pathfind.Destroyed then
+			continue
+		end
+
+		Agents[pathfind] = true
+	end
+
+	table.clear(JoiningAgents)
+	--
+
+	--
+	for pathfind in Agents do
+		xpcall(step_agent, report_step_error, pathfind, dt)
+	end
+	--
+
+	--
+	dispatch_computes()
+	--
+
+	--
+	if next(Agents) ~= nil or #JoiningAgents > 0 or #ComputeQueue > 0 then
+		return
+	end
+	--
+
+	stop_scheduler()
+end
+
+local function register_agent(pathfind: Pathfind)
+	--
+	table.insert(JoiningAgents, pathfind)
+	--
+
+	--
+	if SchedulerConnection then
+		return
+	end
+	--
+
+	SchedulerConnection = RunService.Heartbeat:Connect(step_scheduler)
+end
+
+function Pathfind.ConnectPathLogic(self: Pathfind)
+	--
+	self.PathLogicKeeper:Clean()
+	--
+
+	--
+	self.PathLogicKeeper:Connect(self.Path.Blocked, function(blocked_waypoint_index: number)
+		if not self.IsMoving then
+			return
+		end
+
+		if blocked_waypoint_index < self.CurrentWaypointIndex - 1 then
+			return
+		end
+
+		self:RecalculatePath()
+	end)
+
+	if self.Humanoid then
+		self.PathLogicKeeper:Connect(self.Humanoid.MoveToFinished, function(reached: boolean)
+			if not self.IsMoving then
+				return
+			end
+
+			if not reached then
+				return
+			end
+
+			advance(self)
+		end)
+	end
+
+	self.PathLogicKeeper:Connect(self.OnPathCalculated, function()
+		self.IsMoving = true
+		self:_ExecuteWaypoint()
+	end)
+
+	self.PathLogicKeeper:Connect(self.OnPathEnded, function()
+		self:_ClearVisualisationNodes()
+	end)
+	--
+
 	--
 	if self.Destroyed then
 		return
 	end
 	--
 
+	register_agent(self)
+end
+
+function Pathfind.RecalculatePath(self: Pathfind)
+	request_path(self, false)
+end
+
+local function set_destination(pathfind: Pathfind, target_position: Vector3)
 	--
-	local clock = os.clock()
-
-	if clock - self.LastPathComputeTime < self.Config.RECALCULATE_THROTTLE then
-		self.PendingRecalculate = true
-		return
-	end
-
-	self.PendingRecalculate = false
-	self.LastPathComputeTime = clock
+	pathfind.ChaseTarget = nil
+	pathfind.LastChasePosition = nil
+	pathfind.StoppingDistance = nil
+	set_ray_filter(pathfind, nil)
 	--
 
-	self.PathComputeToken = (self.PathComputeToken or 0) + 1
-	local current_token = self.PathComputeToken
-
 	--
-	self:ComputePathToAsync(self.TargetPosition):andThen(function(result)
-		if self.Destroyed or self.PathComputeToken ~= current_token then
-			return
-		end
-
-		if
-			result.Status ~= Enum.PathStatus.Success
-			and not (result.Status == Enum.PathStatus.NoPath and self.Config.PARTIAL_PATH)
-		then
-			PrintUtil:Warn("Failed to recalculate path. Status: " .. tostring(result.Status))
-			return
-		end
-
-		local current_pos = self:GetCurrentPosition()
-		local threshold = math.max(self.Config.WAYPOINT_ARRIVAL_RADIUS, self.Config.AGENT_RADIUS)
-
-		self.Waypoints = result.Waypoints
-		self.CurrentWaypointIndex = 1
-		self.LastAdvanceTime = os.clock()
-		self.LastMovingTime = os.clock()
-		self.LastRecordedPosition = current_pos
-
-		--
-
-		while self.CurrentWaypointIndex < #self.Waypoints do
-			--
-			local wp = self.Waypoints[self.CurrentWaypointIndex]
-
-			local dist = Vector3.new(wp.Position.X - current_pos.X, 0, wp.Position.Z - current_pos.Z).Magnitude
-			if dist > threshold then
-				break
-			end
-			--
-
-			self.CurrentWaypointIndex += 1
-		end
-		--
-
-		self.OnPathCalculated:Fire(self.Waypoints)
-
-		self:_UpdateVisualisation()
-	end)
+	pathfind.TargetPosition = target_position
+	pathfind.StuckCount = 0
+	pathfind.PathComputeToken = (pathfind.PathComputeToken or 0) + 1
 	--
+
+	pathfind:RecalculatePath()
 end
 
 function Pathfind.Goto(self: Pathfind, target_position: Vector3)
 	--
-	self.ChaseTarget = nil
-	self.LastChasePosition = nil
+	cancel_request(self)
 	--
 
-	--
-	self.TargetPosition = target_position
-	--
-
-	self:RecalculatePath()
+	set_destination(self, target_position)
 end
 
---
-local ChaseCleanupKey = "ChaseLogic"
-
-function Pathfind.Chase(self: Pathfind, target: BasePart | Model, stopping_distance: number?)
+function Pathfind.GotoAsync(self: Pathfind, target_position: Vector3): Promise.TypedPromise<()>
 	--
-	self.ChaseTarget = target
-	self.LastChasePosition = nil
-	--
+	const request = {} :: PendingRequest
 
-	--
-	self.Keeper:Remove(ChaseCleanupKey)
-	--
+	const promise = Promise.new(function(resolve, reject, on_cancel)
+		request.Resolve = resolve
+		request.Reject = reject
 
-	local time_since_last_compute = 0
-
-	--
-	self.Keeper:Connect(RunService.Heartbeat, function(dt)
-		if not self.ChaseTarget then
-			self.Keeper:Remove(ChaseCleanupKey)
-			return
-		end
-
-		--
-		time_since_last_compute += dt
-
-		if time_since_last_compute < self.Config.RECALCULATE_THROTTLE then
-			return
-		end
-
-		time_since_last_compute = 0
-		--
-
-		--
-		local target_pos
-
-		if self.ChaseTarget:IsA("Model") then
-			if not self.ChaseTarget.PrimaryPart then
-				target_pos = self.ChaseTarget:GetPivot().Position
-			else
-				target_pos = self.ChaseTarget.PrimaryPart.CFrame.Position
-			end
-		else
-			target_pos = self.ChaseTarget.CFrame.Position
-		end
-		--
-
-		--
-		local current_position = self:GetCurrentPosition()
-
-		if stopping_distance and (target_pos - current_position).Magnitude <= stopping_distance then
-			if not self.IsMoving then
+		on_cancel(function()
+			if self.ActiveRequest ~= request then
 				return
 			end
 
-			self.IsMoving = false
-			self.Waypoints = {}
-			self.CurrentWaypointIndex = 1
-			self.PendingRecalculate = false
-			self.PathComputeToken = (self.PathComputeToken or 0) + 1
+			self.ActiveRequest = nil
+			self:Stop()
+		end)
+	end)
 
-			self.Mover(current_position)
+	request.Cancel = function()
+		promise:cancel()
+	end
+	--
 
-			return
-		end
-		--
+	--
+	cancel_request(self)
+	self.ActiveRequest = request
+	set_destination(self, target_position)
+	--
 
-		--
-		local needs_recalc = false
+	return promise
+end
 
-		if not self.LastChasePosition then
-			needs_recalc = true
-		elseif (target_pos - self.LastChasePosition).Magnitude > self.Config.RECALCULATE_DISTANCE_THRESHOLD then
-			needs_recalc = true
-		elseif not self.IsMoving then
-			needs_recalc = true
-		end
+function Pathfind.Chase(self: Pathfind, target: BasePart | Model, stopping_distance: number?)
+	--
+	cancel_request(self)
+	--
 
-		if not needs_recalc then
-			return
-		end
-		--
-
-		self.LastChasePosition = target_pos
-		self.TargetPosition = target_pos
-
-		self:RecalculatePath()
-	end, ChaseCleanupKey)
+	--
+	self.ChaseTarget = target
+	self.LastChasePosition = nil
+	self.StoppingDistance = stopping_distance
+	self.ChaseElapsed = 0
+	self.StuckCount = 0
+	self.PathComputeToken = (self.PathComputeToken or 0) + 1
+	set_ray_filter(self, target)
 	--
 end
---
 
 function Pathfind.Stop(self: Pathfind)
 	--
-	self.IsMoving = false
-	self.Waypoints = {}
-	self.CurrentWaypointIndex = 1
-	self.PendingRecalculate = false
-	self.LastAdvanceTime = os.clock()
-	self.LastMovingTime = os.clock()
-	self.LastRecordedPosition = self:GetCurrentPosition()
-	self.PathComputeToken = (self.PathComputeToken or 0) + 1
-	--
-
-	--
 	self.ChaseTarget = nil
 	self.LastChasePosition = nil
-	self.Keeper:Remove(ChaseCleanupKey)
+	self.StoppingDistance = nil
+	set_ray_filter(self, nil)
 	--
 
 	--
-	self.OnPathEnded:Fire()
-
-	self.Mover(self:GetCurrentPosition())
+	halt(self)
 	--
+
+	cancel_request(self)
+end
+
+function Pathfind.SetLinkHandler(self: Pathfind, label: string, handler: LinkHandler?)
+	self.LinkHandlers[label] = handler
 end
 
 function Pathfind.Destroy(self: Pathfind)
-	self.Destroyed = true
-	self.PendingRecalculate = false
+	--
+	unregister_agent(self)
 	self.Keeper:Destroy()
+	--
 end
 
+function PathfindModule.GetStats(): PathfindStats
+	--
+	local agent_count = #JoiningAgents
+
+	for _ in Agents do
+		agent_count += 1
+	end
+	--
+
+	--
+	const queued: { [any]: boolean } = {}
+	local queued_count = 0
+
+	for _, pathfind in ComputeQueue do
+		if queued[pathfind] or pathfind.Destroyed or not pathfind.Queued then
+			continue
+		end
+
+		queued[pathfind] = true
+		queued_count += 1
+	end
+	--
+
+	return {
+		Agents = agent_count,
+		Queued = queued_count,
+		InFlight = InFlightComputes,
+	}
+end
+
+function PathfindModule.SetLinkHandler(label: string, handler: LinkHandler?)
+	SharedLinkHandlers[label] = handler
+end
+
+--
 PathfindModule.new = new
+--
 
 return PathfindModule

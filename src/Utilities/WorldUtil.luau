@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > WorldUtil.luau
     Author      > AveryArk
@@ -6,9 +6,14 @@
     Created     > 21/05/2026
 --]]
 
-const PrintUtil = require("./PrintUtil")
+--[=[
+	@class WorldUtil
+	A premium spatial query library that simplifies physics casting (Ray/Block/Sphere casts), overlap checks, proximity calculation, and screen/camera projections.
+]=]
+local WorldUtil = {}
 
-const Below = -Vector3.yAxis
+--
+type WorldUtilModule = typeof(WorldUtil)
 
 type CastMode = "Raycast" | "Block" | "Sphere"
 
@@ -17,6 +22,25 @@ type CastOptions = {
 	BlockSize: Vector3?,
 	SphereRadius: number?,
 }
+--
+
+--
+const Below = -Vector3.yAxis
+--
+
+--
+--[=[
+	@prop RayParams { [string]: RaycastParams } -- Dictionary of registered global RaycastParams.
+	@within WorldUtil
+]=]
+WorldUtil.RayParams = {} :: { [string]: RaycastParams }
+
+--[=[
+	@prop OverlapParams { [string]: OverlapParams } -- Dictionary of registered global OverlapParams.
+	@within WorldUtil
+]=]
+WorldUtil.OverlapParams = {} :: { [string]: OverlapParams }
+--
 
 local function get_cast_result(
 	origin: Vector3,
@@ -24,10 +48,13 @@ local function get_cast_result(
 	ray_param: RaycastParams,
 	options: CastOptions?,
 	cframe: CFrame?
-)
-	local cast_options = (options or {}) :: CastOptions
-	local cast_mode = cast_options.Mode
+): RaycastResult?
+	--
+	const cast_options = (options or {}) :: CastOptions
+	const cast_mode = cast_options.Mode
+	--
 
+	--
 	if cast_mode == "Block" then
 		return workspace:Blockcast(
 			cframe or CFrame.new(origin),
@@ -40,48 +67,34 @@ local function get_cast_result(
 	if cast_mode == "Sphere" then
 		return workspace:Spherecast(origin, cast_options.SphereRadius or 1, direction, ray_param)
 	end
+	--
 
 	return workspace:Raycast(origin, direction, ray_param)
 end
-
---[=[
-	@class WorldUtil
-	A premium spatial query library that simplifies physics casting (Ray/Block/Sphere casts), overlap checks, proximity calculation, and screen/camera projections.
-]=]
---
-local WorldUtil = {}
-
---[=[
-	@prop RayParams { [string]: RaycastParams } -- Dictionary of registered global RaycastParams.
-	@within WorldUtil
-]=]
---
-WorldUtil.RayParams = {}
-
---[=[
-	@prop OverlapParams { [string]: OverlapParams } -- Dictionary of registered global OverlapParams.
-	@within WorldUtil
-]=]
---
-WorldUtil.OverlapParams = {}
 
 --[=[
 	Registers a global set of RaycastParams with a specific identifier.
 	@param id string -- The unique string identifier.
 	@param params RaycastParams -- The RaycastParams to store.
 ]=]
---
 function WorldUtil:AddRayParams(id: string, params: RaycastParams)
+	--
 	WorldUtil.RayParams[id] = params
+	--
 end
 
 --[=[
 	Retrieves the registered RaycastParams associated with a unique identifier.
-	@param id string -- The unique identifier.
+	@param id string? -- The unique identifier.
 	@return RaycastParams? -- The retrieved RaycastParams, or `nil` if not found.
 ]=]
---
-function WorldUtil:GetRayParams(id: string): RaycastParams?
+function WorldUtil:GetRayParams(id: string?): RaycastParams?
+	--
+	if not id then
+		return nil
+	end
+	--
+
 	return WorldUtil.RayParams[id]
 end
 
@@ -89,9 +102,10 @@ end
 	Removes the registered RaycastParams associated with a unique identifier.
 	@param id string -- The unique identifier.
 ]=]
---
 function WorldUtil:RemoveRayParams(id: string)
+	--
 	WorldUtil.RayParams[id] = nil
+	--
 end
 
 --[=[
@@ -99,18 +113,24 @@ end
 	@param id string -- The unique string identifier.
 	@param params OverlapParams -- The OverlapParams to store.
 ]=]
---
 function WorldUtil:AddOverlapParams(id: string, params: OverlapParams)
+	--
 	WorldUtil.OverlapParams[id] = params
+	--
 end
 
 --[=[
 	Retrieves the registered OverlapParams associated with a unique identifier.
-	@param id string -- The unique identifier.
+	@param id string? -- The unique identifier.
 	@return OverlapParams? -- The retrieved OverlapParams, or `nil` if not found.
 ]=]
---
-function WorldUtil:GetOverlapParams(id: string): OverlapParams?
+function WorldUtil:GetOverlapParams(id: string?): OverlapParams?
+	--
+	if not id then
+		return nil
+	end
+	--
+
 	return WorldUtil.OverlapParams[id]
 end
 
@@ -118,9 +138,10 @@ end
 	Removes the registered OverlapParams associated with a unique identifier.
 	@param id string -- The unique identifier.
 ]=]
---
 function WorldUtil:RemoveOverlapParams(id: string)
+	--
 	WorldUtil.OverlapParams[id] = nil
+	--
 end
 
 --[=[
@@ -128,19 +149,23 @@ end
 	@param param { Position: Vector3, Distance: number, RayParamsId: string, RayParams: RaycastParams? } & CastOptions -- The parameter object configuring the cast.
 	@return RaycastResult? -- The physics cast result, or `nil` if nothing was hit.
 ]=]
---
-function WorldUtil:RayBelow(param: {
-	Position: Vector3,
-	Distance: number,
-	RayParamsId: string?,
-	RayParams: RaycastParams?,
-} & CastOptions): RaycastResult?
-	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
+function WorldUtil.RayBelow(
+	self: WorldUtilModule,
+	param: {
+		Position: Vector3,
+		Distance: number,
+		RayParamsId: string?,
+		RayParams: RaycastParams?,
+	} & CastOptions
+): RaycastResult?
+	--
+	const ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
-		PrintUtil:Error(`No RayParams found for id: {param.RayParamsId}`)
-		return
+		error(`No RayParams found for id: {param.RayParamsId}`)
+		return nil
 	end
+	--
 
 	return get_cast_result(param.Position, Below * param.Distance, ray_param, param, CFrame.new(param.Position))
 end
@@ -150,14 +175,18 @@ end
 	@param param { Position: Vector3, Distance: number, RayParamsId: string, RayParams: RaycastParams? } & CastOptions -- The parameter object configuring the cast.
 	@return boolean -- `true` if grounded, `false` otherwise.
 ]=]
---
-function WorldUtil:IsGrounded(param: {
-	Position: Vector3,
-	Distance: number,
-	RayParamsId: string?,
-	RayParams: RaycastParams?,
-} & CastOptions): boolean
-	local raycast_result = self:RayBelow(param)
+function WorldUtil.IsGrounded(
+	self: WorldUtilModule,
+	param: {
+		Position: Vector3,
+		Distance: number,
+		RayParamsId: string?,
+		RayParams: RaycastParams?,
+	} & CastOptions
+): boolean
+	--
+	const raycast_result = self:RayBelow(param)
+	--
 
 	return raycast_result ~= nil
 end
@@ -167,20 +196,24 @@ end
 	@param param { CFrame: CFrame, Distance: number, RayParamsId: string, RayParams: RaycastParams?, Direction: Vector3? } & CastOptions -- The parameter object configuring the cast.
 	@return RaycastResult? -- The physics cast result, or `nil` if nothing was hit.
 ]=]
---
-function WorldUtil:RayFront(param: {
-	CFrame: CFrame,
-	Distance: number,
-	RayParamsId: string?,
-	RayParams: RaycastParams?,
-	Direction: Vector3?,
-} & CastOptions): RaycastResult?
-	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
+function WorldUtil.RayFront(
+	self: WorldUtilModule,
+	param: {
+		CFrame: CFrame,
+		Distance: number,
+		RayParamsId: string?,
+		RayParams: RaycastParams?,
+		Direction: Vector3?,
+	} & CastOptions
+): RaycastResult?
+	--
+	const ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
-		PrintUtil:Error(`No RayParams found for id: {param.RayParamsId}`)
-		return
+		error(`No RayParams found for id: {param.RayParamsId}`)
+		return nil
 	end
+	--
 
 	return get_cast_result(
 		param.CFrame.Position,
@@ -196,20 +229,24 @@ end
 	@param param { CFrame: CFrame, Distance: number, RayParamsId: string, RayParams: RaycastParams?, Direction: Vector3? } & CastOptions -- The parameter object configuring the cast.
 	@return RaycastResult? -- The physics cast result, or `nil` if nothing was hit.
 ]=]
---
-function WorldUtil:RaySide(param: {
-	CFrame: CFrame,
-	Distance: number,
-	RayParamsId: string?,
-	RayParams: RaycastParams?,
-	Direction: Vector3?,
-} & CastOptions): RaycastResult?
-	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
+function WorldUtil.RaySide(
+	self: WorldUtilModule,
+	param: {
+		CFrame: CFrame,
+		Distance: number,
+		RayParamsId: string?,
+		RayParams: RaycastParams?,
+		Direction: Vector3?,
+	} & CastOptions
+): RaycastResult?
+	--
+	const ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
-		PrintUtil:Error(`No RayParams found for id: {param.RayParamsId}`)
-		return
+		error(`No RayParams found for id: {param.RayParamsId}`)
+		return nil
 	end
+	--
 
 	return get_cast_result(
 		param.CFrame.Position,
@@ -225,20 +262,24 @@ end
 	@param param { CFrame: CFrame, Distance: number, RayParamsId: string, RayParams: RaycastParams?, Direction: Vector3? } & CastOptions -- The parameter object configuring the cast.
 	@return RaycastResult? -- The physics cast result, or `nil` if nothing was hit.
 ]=]
---
-function WorldUtil:RayUp(param: {
-	CFrame: CFrame,
-	Distance: number,
-	RayParamsId: string,
-	RayParams: RaycastParams?,
-	Direction: Vector3?,
-} & CastOptions): RaycastResult?
-	local ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
+function WorldUtil.RayUp(
+	self: WorldUtilModule,
+	param: {
+		CFrame: CFrame,
+		Distance: number,
+		RayParamsId: string,
+		RayParams: RaycastParams?,
+		Direction: Vector3?,
+	} & CastOptions
+): RaycastResult?
+	--
+	const ray_param = param.RayParams or self:GetRayParams(param.RayParamsId)
 
 	if not ray_param then
-		PrintUtil:Error(`No RayParams found for id: {param.RayParamsId}`)
-		return
+		error(`No RayParams found for id: {param.RayParamsId}`)
+		return nil
 	end
+	--
 
 	return get_cast_result(
 		param.CFrame.Position,
@@ -254,18 +295,22 @@ end
 	@param param { Position: Vector3, Distance: number, RayParamsId: string, RayParams: RaycastParams? } & CastOptions -- The parameters.
 	@return Vector3? -- The hit position vector, or `nil` if no surface was hit.
 ]=]
---
-function WorldUtil:GetGroundPosition(param: {
-	Position: Vector3,
-	Distance: number,
-	RayParamsId: string?,
-	RayParams: RaycastParams?,
-} & CastOptions): Vector3?
-	local raycast_result = self:RayBelow(param)
+function WorldUtil.GetGroundPosition(
+	self: WorldUtilModule,
+	param: {
+		Position: Vector3,
+		Distance: number,
+		RayParamsId: string?,
+		RayParams: RaycastParams?,
+	} & CastOptions
+): Vector3?
+	--
+	const raycast_result = self:RayBelow(param)
 
 	if not raycast_result then
 		return nil
 	end
+	--
 
 	return raycast_result.Position
 end
@@ -275,18 +320,22 @@ end
 	@param param { Position: Vector3, Distance: number, RayParamsId: string, RayParams: RaycastParams? } & CastOptions -- The parameters.
 	@return Vector3? -- The hit surface normal Vector3, or `nil` if no surface was hit.
 ]=]
---
-function WorldUtil:GetGroundNormal(param: {
-	Position: Vector3,
-	Distance: number,
-	RayParamsId: string?,
-	RayParams: RaycastParams?,
-} & CastOptions): Vector3?
-	local raycast_result = self:RayBelow(param)
+function WorldUtil.GetGroundNormal(
+	self: WorldUtilModule,
+	param: {
+		Position: Vector3,
+		Distance: number,
+		RayParamsId: string?,
+		RayParams: RaycastParams?,
+	} & CastOptions
+): Vector3?
+	--
+	const raycast_result = self:RayBelow(param)
 
 	if not raycast_result then
 		return nil
 	end
+	--
 
 	return raycast_result.Normal
 end
@@ -296,14 +345,18 @@ end
 	@param param { Center: Vector3, Radius: number, OverlapParamsId: string, OverlapParams: OverlapParams? } -- The query configuration.
 	@return { BasePart } -- An array list of matching BaseParts.
 ]=]
---
-function WorldUtil:GetPartsInRadius(param: {
-	Center: Vector3,
-	Radius: number,
-	OverlapParamsId: string?,
-	OverlapParams: OverlapParams?,
-}): { BasePart }
-	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
+function WorldUtil.GetPartsInRadius(
+	self: WorldUtilModule,
+	param: {
+		Center: Vector3,
+		Radius: number,
+		OverlapParamsId: string?,
+		OverlapParams: OverlapParams?,
+	}
+): { BasePart }
+	--
+	const overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
+	--
 
 	return workspace:GetPartBoundsInRadius(param.Center, param.Radius, overlap_param)
 end
@@ -313,14 +366,18 @@ end
 	@param param { CFrame: CFrame, Size: Vector3, OverlapParamsId: string, OverlapParams: OverlapParams? } -- The query configuration.
 	@return { BasePart } -- An array list of matching BaseParts.
 ]=]
---
-function WorldUtil:GetPartsInBox(param: {
-	CFrame: CFrame,
-	Size: Vector3,
-	OverlapParamsId: string?,
-	OverlapParams: OverlapParams?,
-}): { BasePart }
-	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
+function WorldUtil.GetPartsInBox(
+	self: WorldUtilModule,
+	param: {
+		CFrame: CFrame,
+		Size: Vector3,
+		OverlapParamsId: string?,
+		OverlapParams: OverlapParams?,
+	}
+): { BasePart }
+	--
+	const overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
+	--
 
 	return workspace:GetPartBoundsInBox(param.CFrame, param.Size, overlap_param)
 end
@@ -330,18 +387,23 @@ end
 	@param param { Part: BasePart, OverlapParamsId: string, OverlapParams: OverlapParams? } -- The query configuration.
 	@return { BasePart } -- An array list of overlapping BaseParts.
 ]=]
---
-function WorldUtil:GetPartsInPart(param: {
-	Part: BasePart,
-	OverlapParamsId: string?,
-	OverlapParams: OverlapParams?,
-}): { BasePart }
-	local overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
+function WorldUtil.GetPartsInPart(
+	self: WorldUtilModule,
+	param: {
+		Part: BasePart,
+		OverlapParamsId: string?,
+		OverlapParams: OverlapParams?,
+	}
+): { BasePart }
+	--
+	const overlap_param = param.OverlapParams or self:GetOverlapParams(param.OverlapParamsId)
+	--
 
 	return workspace:GetPartsInPart(param.Part, overlap_param)
 end
 
 local function resolve_position(point: Vector3 | CFrame | BasePart | Model): Vector3
+	--
 	if typeof(point) == "Vector3" then
 		return point
 	end
@@ -357,8 +419,19 @@ local function resolve_position(point: Vector3 | CFrame | BasePart | Model): Vec
 	if point:IsA("Model") then
 		return point:GetPivot().Position
 	end
+	--
 
 	error("Invalid point type")
+end
+
+local function get_instance_position(instance: BasePart | Model): Vector3
+	--
+	if instance:IsA("Model") then
+		return instance:GetPivot().Position
+	end
+	--
+
+	return instance.Position
 end
 
 --[=[
@@ -367,13 +440,14 @@ end
 	@param point_b Vector3 | CFrame | BasePart | Model -- The second point.
 	@return number -- The distance in studs.
 ]=]
---
 function WorldUtil:GetDistance(
 	point_a: Vector3 | CFrame | BasePart | Model,
 	point_b: Vector3 | CFrame | BasePart | Model
 ): number
-	local position_a = resolve_position(point_a)
-	local position_b = resolve_position(point_b)
+	--
+	const position_a = resolve_position(point_a)
+	const position_b = resolve_position(point_b)
+	--
 
 	return (position_a - position_b).Magnitude
 end
@@ -384,29 +458,29 @@ end
 	@return BasePart | Model? -- The closest spatial instance found, or `nil` if list is empty.
 	@return number -- The distance in studs to the closest instance.
 ]=]
---
 function WorldUtil:GetNearest(param: {
 	Origin: Vector3,
 	Instances: { BasePart | Model },
 }): (BasePart | Model?, number)
+	--
 	local nearest_part = nil
 	local nearest_distance = math.huge
+	--
 
 	for _, instance in param.Instances do
-		local position
+		--
+		const position = get_instance_position(instance)
+		const distance = (param.Origin - position).Magnitude
 
-		if instance:IsA("Model") then
-			position = instance:GetPivot().Position
-		else
-			position = instance.Position
+		if not (distance < nearest_distance) then
+			continue
 		end
+		--
 
-		local distance = (param.Origin - position).Magnitude
-
-		if distance < nearest_distance then
-			nearest_part = instance
-			nearest_distance = distance
-		end
+		--
+		nearest_part = instance
+		nearest_distance = distance
+		--
 	end
 
 	return nearest_part, nearest_distance
@@ -418,11 +492,13 @@ end
 	@return BasePart | Model? -- The closest spatial instance, or `nil`.
 	@return number -- The distance in studs.
 ]=]
---
-function WorldUtil:GetNearestPart(param: {
-	Origin: Vector3,
-	Instances: { BasePart | Model },
-})
+function WorldUtil.GetNearestPart(
+	self: WorldUtilModule,
+	param: {
+		Origin: Vector3,
+		Instances: { BasePart | Model },
+	}
+): (BasePart | Model?, number)
 	return self:GetNearest(param)
 end
 
@@ -433,17 +509,25 @@ end
 	@return Vector3? -- The closest coordinate point, or `nil` if array is empty.
 	@return number -- The distance in studs to that point.
 ]=]
---
 function WorldUtil:GetNearestPoint(origin: Vector3, points: { Vector3 }): (Vector3?, number)
+	--
 	local nearest_point = nil
 	local nearest_distance = math.huge
+	--
 
 	for _, point in points do
-		local distance = (origin - point).Magnitude
-		if distance < nearest_distance then
-			nearest_point = point
-			nearest_distance = distance
+		--
+		const distance = (origin - point).Magnitude
+
+		if not (distance < nearest_distance) then
+			continue
 		end
+		--
+
+		--
+		nearest_point = point
+		nearest_distance = distance
+		--
 	end
 
 	return nearest_point, nearest_distance
@@ -456,15 +540,19 @@ end
 	@return Vector2? -- The projected 2D viewport coordinate, or `nil` if camera is missing.
 	@return boolean -- `true` if the projected point is visible within the screen viewport boundary, `false` otherwise.
 ]=]
---
 function WorldUtil:WorldToScreen(world_position: Vector3, camera: Camera?): (Vector2?, boolean)
-	local active_camera = camera or workspace.CurrentCamera
+	--
+	const active_camera = camera or workspace.CurrentCamera
 
 	if not active_camera then
 		return nil, false
 	end
+	--
 
-	local screen_position, on_screen = active_camera:WorldToViewportPoint(world_position)
+	--
+	const screen_position, on_screen = active_camera:WorldToViewportPoint(world_position)
+	--
+
 	return Vector2.new(screen_position.X, screen_position.Y), on_screen
 end
 
@@ -475,15 +563,19 @@ end
 	@param camera Camera? -- Optional target camera (defaults to CurrentCamera).
 	@return Vector3? -- The projected 3D world position coordinate, or `nil` if camera is missing.
 ]=]
---
 function WorldUtil:ScreenToWorld(screen_position: Vector2, depth: number, camera: Camera?): Vector3?
-	local active_camera = camera or workspace.CurrentCamera
+	--
+	const active_camera = camera or workspace.CurrentCamera
 
 	if not active_camera then
 		return nil
 	end
+	--
 
-	local ray = active_camera:ViewportPointToRay(screen_position.X, screen_position.Y)
+	--
+	const ray = active_camera:ViewportPointToRay(screen_position.X, screen_position.Y)
+	--
+
 	return ray.Origin + ray.Direction * depth
 end
 

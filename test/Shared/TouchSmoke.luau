@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > TouchSmoke.luau
     Author      > AveryArk
@@ -71,17 +71,27 @@ end
 --
 
 --
+local function first_binding(action_name: string): unknown
+	const binding = Craftsman.InputUtil.GetBinding(action_name)
+
+	if not binding then
+		return nil
+	end
+
+	return binding[1]
+end
+
 local function run_bindings(context: string)
 	local InputUtil = Craftsman.InputUtil
 
 	InputUtil.SetPrimitiveBinding("SmokeBind", { Enum.KeyCode.Q })
-	assert_equal("primitive binds when unbound", InputUtil.GetBinding("SmokeBind")[1], Enum.KeyCode.Q)
+	assert_equal("primitive binds when unbound", first_binding("SmokeBind"), Enum.KeyCode.Q)
 
 	InputUtil.BindAction("SmokeBind", { Enum.KeyCode.E })
-	assert_equal("rebind takes effect", InputUtil.GetBinding("SmokeBind")[1], Enum.KeyCode.E)
+	assert_equal("rebind takes effect", first_binding("SmokeBind"), Enum.KeyCode.E)
 
 	InputUtil.ResetBinding("SmokeBind")
-	assert_equal("reset restores the primitive", InputUtil.GetBinding("SmokeBind")[1], Enum.KeyCode.Q)
+	assert_equal("reset restores the primitive", first_binding("SmokeBind"), Enum.KeyCode.Q)
 
 	InputUtil.UnbindAction("SmokeBind")
 	assert_equal("unbind clears the binding", InputUtil.GetBinding("SmokeBind"), nil)
@@ -154,7 +164,7 @@ local function run_layout(context: string)
 	button:ApplyLayout({ Position = { X = 0.25, Y = 0.75 }, Scale = 90 / 70 })
 
 	assert_equal("applying a layout marks the button customised", button.IsCustomised, true)
-	assert_equal("applying a layout resizes", button:GetLayout().Scale * 70, 90)
+	assert_equal("applying a layout resizes", (button:GetLayout().Scale :: number) * 70, 90)
 	assert_equal("applying a layout leaves the zone", button.Zone, nil)
 
 	local saved = TouchUtil.GetLayout()
@@ -176,7 +186,7 @@ local function run_layout(context: string)
 
 	button:ApplyLayout({ Position = { X = 5, Y = -5 } })
 
-	local clamped = button:GetLayout().Position
+	local clamped = button:GetLayout().Position :: { X: number, Y: number }
 
 	assert_equal("clamped off-screen X stays on screen", clamped.X < 1, true)
 	assert_equal("clamped off-screen Y stays on screen", clamped.Y > 0, true)
@@ -227,7 +237,8 @@ local function build_edit_toggle(context: string)
 		local jump = TouchUtil.GetJumpButton()
 
 		if jump then
-			print(`[TouchSmoke/{context}] jump instance is now {jump.Instance.Name} under {jump.Instance.Parent.Name}`)
+			const parent = jump.Instance.Parent :: Instance
+			print(`[TouchSmoke/{context}] jump instance is now {jump.Instance.Name} under {parent.Name}`)
 		end
 
 		toggle.Text = if enabled then "Done" else "Edit layout"
@@ -239,13 +250,20 @@ local function build_edit_toggle(context: string)
 		local where = if position
 			then `{string.format("%.3f", position.X)}, {string.format("%.3f", position.Y)}`
 			else "in zone"
-		print(`[TouchSmoke/{context}] {layout_id} moved to ({where}) at size {entry.Size}`)
+		print(`[TouchSmoke/{context}] {layout_id} moved to ({where}) at scale {entry.Scale}`)
 	end)
 end
 --
 
 --
-const DEMO_BUTTONS = {
+type DemoButton = {
+	action: string,
+	order: number,
+	text: string?,
+	overlay: string?,
+}
+
+const DEMO_BUTTONS: { DemoButton } = {
 	{ action = "SmokeDemoA", text = "A", order = 1 },
 	{ action = "SmokeDemoB", text = "B", order = 2 },
 	{ action = "SmokeDemoC", text = "C", order = 3 },
@@ -271,7 +289,8 @@ local function run_demo_pad(context: string)
 	local jump = TouchUtil.AdoptJumpButton()
 
 	if jump then
-		print(`[TouchSmoke/{context}] jump adopted, still parented to {jump.Instance.Parent.Name}`)
+		const parent = jump.Instance.Parent :: Instance
+		print(`[TouchSmoke/{context}] jump adopted, still parented to {parent.Name}`)
 	else
 		print(`[TouchSmoke/{context}] no CoreGui jump button to adopt`)
 	end

@@ -2,7 +2,7 @@
 	"devtemplate": {
 		"prefix": ["devtemplate"],
 		"body": [
-			"--!nonstrict",
+			"--!strict",
 			"--[[",
 			"    FileName    > $TM_FILENAME",
 			"    Author      > AveryArk",
@@ -24,7 +24,7 @@
 	"sign": {
 		"prefix": ["sign", "signature"],
 		"body": [
-			"--!nonstrict",
+			"--!strict",
 			"--[[",
 			"    FileName    > $TM_FILENAME",
 			"    Author      > AveryArk",

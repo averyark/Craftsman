@@ -6,7 +6,8 @@
     Created     > 30/05/2026
 --]]
 
-export type State = {
+--
+export type StateFields = {
 	Name: string,
 	Parent: State?,
 	Children: { [string]: State },
@@ -14,7 +15,10 @@ export type State = {
 	OnExit: ((state: State, context: any) -> ())?,
 	OnUpdate: ((state: State, dt: number, context: any) -> ())?,
 	_ChildKey: string?,
+}
 
+export type StateMethods = {
+	__index: StateMethods,
 	SetName: (self: State, name: string) -> boolean,
 	Enter: (self: State, context: any?) -> (),
 	Exit: (self: State, context: any?) -> (),
@@ -22,13 +26,23 @@ export type State = {
 	_SetParent: (self: State, parent: State?) -> boolean,
 }
 
+export type State = setmetatable<StateFields, StateMethods>
+
 export type StateHandlers<Context> = {
 	Enter: ((state: State, context: Context) -> ())?,
 	Exit: ((state: State, context: Context) -> ())?,
 	Update: ((state: State, dt: number, context: Context) -> ())?,
 }
+--
 
-export type Machine = {
+--
+export type PendingTransition = {
+	Target: State,
+	Context: any?,
+	Source: Player?,
+}
+
+export type MachineFields = {
 	_Id: string?,
 	_ClientAuthoritative: boolean,
 	Transitioned: any,
@@ -38,12 +52,15 @@ export type Machine = {
 	_Current: State?,
 	_Running: boolean,
 	_IsTransitioning: boolean,
-	_PendingTransitions: { any },
+	_PendingTransitions: { PendingTransition },
 	_PendingTransitionHead: number,
 	_PendingTransitionTail: number,
 	_PendingTransitionDrainScheduled: boolean,
 	_Destroyed: boolean,
+}
 
+export type MachineMethods = {
+	__index: MachineMethods,
 	AddState: (self: Machine, state: State, parent: State?) -> boolean,
 	GetState: (self: Machine, name: string) -> State?,
 	GetId: (self: Machine) -> string?,
@@ -63,5 +80,8 @@ export type Machine = {
 	SetReplicationTargets: (self: Machine, targets: { Player }?) -> boolean,
 	SyncReplication: (self: Machine, targets: { Player }?) -> boolean,
 }
+
+export type Machine = setmetatable<MachineFields, MachineMethods>
+--
 
 return nil

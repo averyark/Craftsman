@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Entity.luau
     Author      > AveryArk
@@ -8,68 +8,100 @@
 
 const Players = game:GetService("Players")
 
-const Keeper = require("../../../Keeper")
-const Signal = require("./Signal")
-const PrintUtil = require("./Utilities/PrintUtil")
+const Keeper = require("../packages/roblox/Keeper")
+const Signal = require("../packages/roblox/Signal")
 
 local EntityModule = {}
 
-EntityModule.Entities = {}
-
-local Entity = {}
-Entity.__index = Entity
+--
+EntityModule.Entities = {} :: { [Instance]: Entity }
+--
 
 --
-local RIG_WAIT_TIMEOUT = 5
+local Entity = {}
+Entity.__index = Entity
+--
 
-EntityModule.Spawned = Signal.new()
-EntityModule.Died = Signal.new()
-EntityModule.Removing = Signal.new()
+--
+type EntityFields = {
+	Instance: Model,
+	Player: Player?,
+	Humanoid: Humanoid,
+	HumanoidRootPart: BasePart,
+	Keeper: Keeper.Keeper,
+}
 
-local function new(entity: Instance, player: Player?)
-	PrintUtil:Assert(entity:IsA("Model"), "Invalid entity.")
+export type Entity = typeof(setmetatable({} :: EntityFields, Entity))
+--
+
+--
+const RIG_WAIT_TIMEOUT = 5
+--
+
+--
+EntityModule.Spawned = Signal.new() :: Signal.Signal<Entity>
+EntityModule.Died = Signal.new() :: Signal.Signal<Entity>
+EntityModule.Removing = Signal.new() :: Signal.Signal<Entity>
+--
+
+local function new(entity: Instance, player: Player?): Entity
+	--
+	assert(entity:IsA("Model"), "Invalid entity.")
 
 	if EntityModule.Entities[entity] then
 		return EntityModule.Entities[entity]
 	end
+	--
 
-	local self = setmetatable({}, Entity)
+	--
+	const self = setmetatable({} :: EntityFields, Entity)
 
-	self.Instance = entity
+	self.Instance = entity :: Model
 	self.Player = player or Players:GetPlayerFromCharacter(self.Instance)
-	self.Humanoid = entity:WaitForChild("Humanoid", RIG_WAIT_TIMEOUT)
-	self.HumanoidRootPart = entity:WaitForChild("HumanoidRootPart", RIG_WAIT_TIMEOUT)
+	self.Humanoid = entity:WaitForChild("Humanoid", RIG_WAIT_TIMEOUT) :: Humanoid
+	self.HumanoidRootPart = entity:WaitForChild("HumanoidRootPart", RIG_WAIT_TIMEOUT) :: BasePart
+	--
 
 	--
 	if not self.Humanoid then
-		PrintUtil:Error(`Entity.new: {entity:GetFullName()} has no Humanoid after {RIG_WAIT_TIMEOUT}s.`, 2)
+		error(`Entity.new: {entity:GetFullName()} has no Humanoid after {RIG_WAIT_TIMEOUT}s.`, 2)
 	end
 
 	if not self.HumanoidRootPart then
-		PrintUtil:Error(`Entity.new: {entity:GetFullName()} has no HumanoidRootPart after {RIG_WAIT_TIMEOUT}s.`, 2)
+		error(`Entity.new: {entity:GetFullName()} has no HumanoidRootPart after {RIG_WAIT_TIMEOUT}s.`, 2)
 	end
+	--
 
+	--
 	self.Keeper = Keeper.new()
 
 	EntityModule.Entities[entity] = self
 	self.Keeper:Add(function()
 		EntityModule.Entities[entity] = nil
 	end)
+	--
 
+	--
 	self.Keeper:Add(entity.AncestryChanged:Connect(function()
 		if entity:IsDescendantOf(game) then
 			return
 		end
+
 		EntityModule.Died:Fire(self)
 		self.Keeper:Destroy()
 	end))
+	--
 
+	--
 	EntityModule.Spawned:Fire(self)
+	--
 
+	--
 	self.Keeper:Add(self.Humanoid.Died:Connect(function()
 		EntityModule.Died:Fire(self)
 		self.Keeper:Destroy()
 	end))
+	--
 
 	return self
 end
@@ -83,8 +115,7 @@ end
 
 	@return Humanoid? -- The Humanoid, or nil.
 ]=]
---
-function Entity:GetHumanoid(): Humanoid?
+function Entity.GetHumanoid(self: Entity): Humanoid?
 	return self.Instance:FindFirstChildWhichIsA("Humanoid")
 end
 
@@ -95,29 +126,35 @@ end
 
 	@return BasePart? -- The root part, or nil.
 ]=]
---
-function Entity:GetRoot(): BasePart?
-	local root = self.Instance:FindFirstChild("HumanoidRootPart")
+function Entity.GetRoot(self: Entity): BasePart?
+	--
+	const root = self.Instance:FindFirstChild("HumanoidRootPart")
+
 	if root and root:IsA("BasePart") then
 		return root
 	end
+	--
 
 	return self.Instance.PrimaryPart
 end
 
-function Entity:Destroy()
+function Entity.Destroy(self: Entity)
+	--
 	EntityModule.Removing:Fire(self)
+	--
 
+	--
 	self.Instance:Destroy()
 	EntityModule.Entities[self.Instance] = nil
+	--
 end
 
-export type Entity = typeof(new(...))
-
-function EntityModule.Get(character): Entity?
+function EntityModule.Get(character: Instance): Entity?
 	return EntityModule.Entities[character] or new(character)
 end
 
+--
 EntityModule.new = new
+--
 
 return EntityModule

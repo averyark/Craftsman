@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Solo.luau
     Author      > AveryArk
@@ -11,11 +11,18 @@
 
 const SmokeRecord = require("@game/ReplicatedStorage/Shared/SmokeRecord")
 
-local Solo = {}
+type Keeper = typeof(require("@game/ReplicatedStorage/Packages/packages/roblox/Keeper").new())
+
+local Solo = {
+	Keeper = nil :: Keeper?,
+}
 
 function Solo.Start()
 	SmokeRecord.Log("Solo", "start_begin")
-	Solo.Keeper:Add(function()
+
+	const keeper = Solo.Keeper :: Keeper
+
+	keeper:Add(function()
 		SmokeRecord.Log("Solo", "keeper_cleaned")
 	end)
 	SmokeRecord.Log("Solo", "start_end")

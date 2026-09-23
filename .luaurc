@@ -1,5 +1,5 @@
 {
-	"languageMode": "nonstrict",
+	"languageMode": "strict",
 	"lint": {
 		"*": false,
 		"UnknownGlobal": true,

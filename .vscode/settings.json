@@ -2,5 +2,8 @@
     "workbench.colorCustomizations": {
         "editorUnnecessaryCode.border": "#00ffff"
     },
-    "task.allowAutomaticTasks": "on"
+    "task.allowAutomaticTasks": "on",
+    "luau-lsp.fflags.enableNewSolver": true,
+    "luau-lsp.sourcemap.rojoProjectFile": "test.project.json",
+    "luau-lsp.types.robloxSecurityLevel": "None"
 }

@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Bootstrap.server.luau
     Author      > AveryArk

@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > LifecycleSmoke.luau
     Author      > AveryArk
@@ -13,7 +13,7 @@
     real loader over real ModuleScripts in a real boot.
 
     Covers: P1.3 dependency-ordered start, P1.4 Stop + Keeper, P1.1 config inversion,
-    P0.1 PrintUtil:Error levels, P2.1 radian helpers, P2.2 Entity rig accessors.
+    P2.1 radian helpers, P2.2 Entity rig accessors.
 --]]
 
 const ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,7 +40,10 @@ function LifecycleSmoke.Run(context: "server" | "client"): number
 	-- game: StopModulesAsync would otherwise tear down the very modules running this.
 	-- Its own Modules/LoadedModules are seeded so `self.Modules or {}` cannot reach
 	-- through the metatable and share the real loader's tables.
-	local loader = setmetatable({ Modules = {}, LoadedModules = {} }, { __index = Craftsman.Component })
+	local loader = setmetatable(
+		{ Modules = {}, LoadedModules = {} } :: typeof(Craftsman.Component),
+		{ __index = Craftsman.Component }
+	)
 
 	-- Not a dot-index: that hard-errors with nothing actionable, and on the client the
 	-- folder has to replicate first. Adding Fixtures to test.project.json also needs a
@@ -109,28 +112,15 @@ function LifecycleSmoke.Run(context: "server" | "client"): number
 	check("Config resolves", Craftsman.Config ~= nil)
 	check(
 		"defaults present",
-		Craftsman.Config.DATA.STORE_NAME == "CraftsmanData",
-		tostring(Craftsman.Config.DATA.STORE_NAME)
+		Craftsman.Config.INTERFACE.MIN_SCALE == 0.5,
+		tostring(Craftsman.Config.INTERFACE.MIN_SCALE)
 	)
 	check(
 		"consumer config applied",
-		Craftsman.Config.DATA.SCHEMA ~= nil,
-		"CraftsmanConfig's SCHEMA did not reach Config"
+		Craftsman.Config.INTERFACE.TEN_FOOT_BOOST == 1.5,
+		"CraftsmanConfig's INTERFACE.TEN_FOOT_BOOST did not reach Config"
 	)
 	check("Configure is exposed", type(Craftsman.Config.Configure) == "function")
-
-	-- P0.1 ------------------------------------------------------------------------
-	local ok, err = pcall(function()
-		Craftsman.PrintUtil:Error("smoke_probe", 2)
-	end)
-	check("Error throws", not ok)
-	check("level is not stringified into the message", not tostring(err):find("smoke_probe 2"), tostring(err))
-	check("message survives", tostring(err):find("smoke_probe") ~= nil, tostring(err))
-
-	-- Informational: which module the prefix names depends on whether Roblox inlines
-	-- PrintUtil's local helpers, which is the open question in the proposal's Rejected
-	-- section. Reported rather than asserted -- it is not this test's call to make.
-	print(`[LifecycleSmoke/{context}] PrintUtil:Error prefix reads: {tostring(err)}`)
 
 	-- P2.1 ------------------------------------------------------------------------
 	local approached = Craftsman.MathUtil.ApproachAngle(6.2, 0.1, 1)
@@ -150,7 +140,7 @@ function LifecycleSmoke.Run(context: "server" | "client"): number
 	rig.PrimaryPart = root
 	rig.Parent = workspace
 
-	local entity_ok, entity = pcall(Craftsman.Entity.new, rig)
+	local entity_ok, entity = pcall(Craftsman.Entity.new, rig, nil)
 	check("Entity.new accepts a complete rig", entity_ok, tostring(entity))
 
 	if entity_ok then

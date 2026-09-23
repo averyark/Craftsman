@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > test.luau
     Author      > AveryArk
@@ -6,11 +6,8 @@
     Created     > 16/06/2026
 --]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local _ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local test = {}
-
-
-
 
 return test

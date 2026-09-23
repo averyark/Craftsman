@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > BarrelSmoke.luau
     Author      > AveryArk

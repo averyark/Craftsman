@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > LifecycleSmoke.luau
     Author      > AveryArk

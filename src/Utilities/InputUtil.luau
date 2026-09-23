@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > InputUtil.luau
     Author      > AveryArk
@@ -9,8 +9,7 @@
 const RunService = game:GetService("RunService")
 const UserInputService = game:GetService("UserInputService")
 
-const Signal = require("../Signal")
-const InputStore = require("../Store/InputStore")
+const Signal = require("../../packages/roblox/Signal")
 
 --[=[
 	@class InputUtil
@@ -22,17 +21,42 @@ const InputStore = require("../Store/InputStore")
 	and `Ended` when the last one releases it, so a player holding the same action on two devices
 	does not end it by lifting one.
 ]=]
---
 local InputUtil = {}
 
+--
 export type DeviceType = "KeyboardMouse" | "Gamepad" | "Touch"
 export type InputKey = Enum.KeyCode | Enum.UserInputType
 
-local ActionBindings = {}
-local PrimitiveBindings = {}
-local ActiveActions = {}
-local ActionSources = {}
-local ActionsByKey = {}
+type InputUtilModule = {
+	BindAction: (action_name: string, key_array: { InputKey }) -> (),
+	SetPrimitiveBinding: (action_name: string, key_array: { InputKey }) -> (),
+	ResetBinding: (action_name: string?) -> (),
+	GetBinding: (action_name: string) -> { InputKey }?,
+	UnbindAction: (action_name: string) -> (),
+	SetActionState: (action_name: string, is_active: boolean, source: unknown, input_object: any?) -> (),
+	IsActionActive: (action_name: string) -> boolean,
+	GetMovementVector: () -> Vector3,
+	GetCameraDelta: () -> Vector2,
+	GetDeviceType: () -> DeviceType,
+	DeviceChanged: Signal.Signal<DeviceType, DeviceType>,
+	Began: Signal.Signal<string, InputObject>,
+	Ended: Signal.Signal<string, InputObject>,
+	BindingChanged: Signal.Signal<string, { InputKey }, { InputKey }?>,
+}
+--
+
+--
+const ActionBindings: { [string]: { InputKey } } = {}
+const PrimitiveBindings: { [string]: { InputKey } } = {}
+const ActiveActions: { [string]: boolean } = {}
+const ActionSources: { [string]: { [unknown]: true } } = {}
+const ActionsByKey: { [InputKey]: { [string]: true } } = {}
+
+local CurrentDevice: DeviceType = "KeyboardMouse"
+--
+
+--
+const UNKNOWN_KEY_CODE: Enum.KeyCode = (Enum.KeyCode :: any).Unknown
 
 const INPUT_TYPE_TO_DEVICE: { [Enum.UserInputType]: DeviceType } = {
 	[Enum.UserInputType.Keyboard] = "KeyboardMouse",
@@ -50,48 +74,60 @@ const INPUT_TYPE_TO_DEVICE: { [Enum.UserInputType]: DeviceType } = {
 const FOCUS_LOST_INPUT = table.freeze({
 	UserInputState = Enum.UserInputState.End,
 	UserInputType = Enum.UserInputType.None,
-	KeyCode = Enum.KeyCode.Unknown,
+	KeyCode = UNKNOWN_KEY_CODE,
 })
+--
 
+--
 --[=[
 	@prop Began Signal -- Fired when an action goes from no sources held to one.
 	@within InputUtil
 ]=]
---
 InputUtil.Began = Signal.new()
 
 --[=[
 	@prop Ended Signal -- Fired when an action's last held source releases.
 	@within InputUtil
 ]=]
---
 InputUtil.Ended = Signal.new()
 
 --[=[
 	@prop BindingChanged Signal -- Fired with (action_name, new_keys, old_keys) on every rebind.
 	@within InputUtil
 ]=]
---
 InputUtil.BindingChanged = Signal.new()
 
+--[=[
+	@prop DeviceChanged Signal -- Fired with (new_device, previous_device) when the last used device changes.
+	@within InputUtil
+]=]
+InputUtil.DeviceChanged = Signal.new()
 --
+
 local function unindex_action(action_name: string)
-	local key_array = ActionBindings[action_name]
+	--
+	const key_array = ActionBindings[action_name]
+
 	if not key_array then
 		return
 	end
+	--
 
+	--
 	for _, key in key_array do
-		local actions = ActionsByKey[key]
+		const actions = ActionsByKey[key]
+
 		if not actions then
 			continue
 		end
 
 		actions[action_name] = nil
 	end
+	--
 end
 
 local function index_action(action_name: string, key_array: { InputKey })
+	--
 	for _, key in key_array do
 		local actions = ActionsByKey[key]
 
@@ -102,11 +138,11 @@ local function index_action(action_name: string, key_array: { InputKey })
 
 		actions[action_name] = true
 	end
+	--
 end
---
 
---
-local function set_action_state(action_name: string, is_active: boolean, source: any, input_object: any)
+local function set_action_state(action_name: string, is_active: boolean, source: unknown, input_object: any)
+	--
 	local sources = ActionSources[action_name]
 
 	if sources == nil then
@@ -117,46 +153,61 @@ local function set_action_state(action_name: string, is_active: boolean, source:
 	if is_active == (sources[source] == true) then
 		return
 	end
+	--
 
-	local was_active = next(sources) ~= nil
+	--
+	const was_active = next(sources) ~= nil
 	sources[source] = if is_active then true else nil
-	local now_active = next(sources) ~= nil
+	const now_active = next(sources) ~= nil
 
 	if now_active == was_active then
 		return
 	end
+	--
 
+	--
 	ActiveActions[action_name] = now_active
-	InputStore.SetActionActive(action_name, now_active)
+	--
 
+	--
 	if now_active then
 		InputUtil.Began:Fire(action_name, input_object)
-	else
-		InputUtil.Ended:Fire(action_name, input_object)
+		return
 	end
+	--
+
+	InputUtil.Ended:Fire(action_name, input_object)
 end
 
 local function release_key_sources(action_name: string, key_array: { InputKey }?)
-	local sources = ActionSources[action_name]
+	--
+	const sources = ActionSources[action_name]
+
 	if sources == nil then
 		return
 	end
+	--
 
+	--
 	if key_array then
 		for _, key in key_array do
 			set_action_state(action_name, false, key, FOCUS_LOST_INPUT)
 		end
+
 		return
 	end
+	--
 
+	--
 	for source in sources do
 		if typeof(source) ~= "EnumItem" then
 			continue
 		end
+
 		set_action_state(action_name, false, source, FOCUS_LOST_INPUT)
 	end
+	--
 end
---
 
 --[=[
 	Binds an action name to a set of KeyCodes or UserInputTypes, replacing any previous binding.
@@ -168,13 +219,15 @@ end
 	@param action_name string -- The name of the action.
 	@param key_array { Enum.KeyCode | Enum.UserInputType } -- The inputs that trigger this action.
 ]=]
---
 function InputUtil.BindAction(action_name: string, key_array: { InputKey })
-	local previous = ActionBindings[action_name]
+	--
+	const previous = ActionBindings[action_name]
 
 	release_key_sources(action_name, previous)
 	unindex_action(action_name)
+	--
 
+	--
 	ActionBindings[action_name] = key_array
 
 	if ActiveActions[action_name] == nil then
@@ -182,6 +235,8 @@ function InputUtil.BindAction(action_name: string, key_array: { InputKey })
 	end
 
 	index_action(action_name, key_array)
+	--
+
 	InputUtil.BindingChanged:Fire(action_name, key_array, previous)
 end
 
@@ -194,13 +249,30 @@ end
 	@param action_name string -- The name of the action.
 	@param key_array { Enum.KeyCode | Enum.UserInputType } -- The default inputs.
 ]=]
---
 function InputUtil.SetPrimitiveBinding(action_name: string, key_array: { InputKey })
+	--
 	PrimitiveBindings[action_name] = table.clone(key_array)
+	--
 
-	if ActionBindings[action_name] == nil then
-		InputUtil.BindAction(action_name, table.clone(key_array))
+	--
+	if ActionBindings[action_name] ~= nil then
+		return
 	end
+	--
+
+	InputUtil.BindAction(action_name, table.clone(key_array))
+end
+
+local function reset_action(action_name: string)
+	--
+	const primitive = PrimitiveBindings[action_name]
+
+	if primitive == nil then
+		return
+	end
+	--
+
+	InputUtil.BindAction(action_name, table.clone(primitive))
 end
 
 --[=[
@@ -210,22 +282,19 @@ end
 
 	@param action_name string? -- The action to reset, or nil for all of them.
 ]=]
---
 function InputUtil.ResetBinding(action_name: string?)
+	--
 	if action_name then
-		local primitive = PrimitiveBindings[action_name]
-
-		if primitive == nil then
-			return
-		end
-
-		InputUtil.BindAction(action_name, table.clone(primitive))
+		reset_action(action_name)
 		return
 	end
+	--
 
+	--
 	for name, primitive in PrimitiveBindings do
 		InputUtil.BindAction(name, table.clone(primitive))
 	end
+	--
 end
 
 --[=[
@@ -234,13 +303,14 @@ end
 	@param action_name string -- The name of the action.
 	@return { Enum.KeyCode | Enum.UserInputType }? -- The bound inputs, or nil if unbound.
 ]=]
---
 function InputUtil.GetBinding(action_name: string): { InputKey }?
-	local bound = ActionBindings[action_name]
+	--
+	const bound = ActionBindings[action_name]
 
 	if bound == nil then
 		return nil
 	end
+	--
 
 	return table.clone(bound)
 end
@@ -253,19 +323,26 @@ end
 
 	@param action_name string -- The name of the action to unbind.
 ]=]
---
 function InputUtil.UnbindAction(action_name: string)
+	--
 	release_key_sources(action_name, ActionBindings[action_name])
 	unindex_action(action_name)
 
 	ActionBindings[action_name] = nil
+	--
 
-	local sources = ActionSources[action_name]
+	--
+	const sources = ActionSources[action_name]
 
-	if sources == nil or next(sources) == nil then
-		ActionSources[action_name] = nil
-		ActiveActions[action_name] = nil
+	if sources ~= nil and next(sources) ~= nil then
+		return
 	end
+	--
+
+	--
+	ActionSources[action_name] = nil
+	ActiveActions[action_name] = nil
+	--
 end
 
 --[=[
@@ -277,11 +354,10 @@ end
 
 	@param action_name string -- The name of the action.
 	@param is_active boolean -- Whether this source is holding the action.
-	@param source any -- The identity of the holder.
+	@param source unknown -- The identity of the holder.
 	@param input_object any? -- Passed through to Began/Ended.
 ]=]
---
-function InputUtil.SetActionState(action_name: string, is_active: boolean, source: any, input_object: any?)
+function InputUtil.SetActionState(action_name: string, is_active: boolean, source: unknown, input_object: any?)
 	set_action_state(action_name, is_active, source, input_object or FOCUS_LOST_INPUT)
 end
 
@@ -290,7 +366,6 @@ end
 	@param action_name string -- The name of the action.
 	@return boolean -- `true` if the action is currently active, `false` otherwise.
 ]=]
---
 function InputUtil.IsActionActive(action_name: string): boolean
 	return ActiveActions[action_name] or false
 end
@@ -299,24 +374,30 @@ end
 	Calculates the normalized WASD and left analog stick thumbstick movement vector.
 	@return Vector3 -- The unit movement vector along the XZ plane.
 ]=]
---
 function InputUtil.GetMovementVector(): Vector3
+	--
 	local movement_vector = Vector3.zero
 
 	if UserInputService:IsKeyDown(Enum.KeyCode.W) then
 		movement_vector += Vector3.new(0, 0, -1)
 	end
+
 	if UserInputService:IsKeyDown(Enum.KeyCode.S) then
 		movement_vector += Vector3.new(0, 0, 1)
 	end
+
 	if UserInputService:IsKeyDown(Enum.KeyCode.A) then
 		movement_vector += Vector3.new(-1, 0, 0)
 	end
+
 	if UserInputService:IsKeyDown(Enum.KeyCode.D) then
 		movement_vector += Vector3.new(1, 0, 0)
 	end
+	--
 
-	local gamepad_state = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
+	--
+	const gamepad_state = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
+
 	for _, input in gamepad_state do
 		if input.KeyCode ~= Enum.KeyCode.Thumbstick1 then
 			continue
@@ -325,10 +406,13 @@ function InputUtil.GetMovementVector(): Vector3
 		movement_vector += Vector3.new(input.Position.X, 0, -input.Position.Y)
 		break
 	end
+	--
 
+	--
 	if movement_vector.Magnitude > 0 then
 		return movement_vector.Unit
 	end
+	--
 
 	return movement_vector
 end
@@ -337,7 +421,6 @@ end
 	Retrieves the camera movement delta from UserInputService.
 	@return Vector2 -- The mouse or touch camera movement delta.
 ]=]
---
 function InputUtil.GetCameraDelta(): Vector2
 	return UserInputService:GetMouseDelta()
 end
@@ -351,59 +434,82 @@ end
 
 	@return DeviceType -- `"KeyboardMouse"`, `"Gamepad"` or `"Touch"`.
 ]=]
---
 function InputUtil.GetDeviceType(): DeviceType
-	return InputStore:getState().DeviceType
+	return CurrentDevice
 end
 
---
+local function set_device_type(device: DeviceType)
+	--
+	const previous = CurrentDevice
+
+	if previous == device then
+		return
+	end
+
+	CurrentDevice = device
+	--
+
+	InputUtil.DeviceChanged:Fire(device, previous)
+end
+
 local function update_device_type(input_type: Enum.UserInputType)
-	local device = INPUT_TYPE_TO_DEVICE[input_type]
+	--
+	const device = INPUT_TYPE_TO_DEVICE[input_type]
 
 	if device == nil then
 		return
 	end
+	--
 
-	InputStore.SetDeviceType(device)
+	set_device_type(device)
 end
 
 local function seed_device_type()
-	local device = INPUT_TYPE_TO_DEVICE[UserInputService:GetLastInputType()]
+	--
+	const device = INPUT_TYPE_TO_DEVICE[UserInputService:GetLastInputType()]
 
 	if device then
-		InputStore.SetDeviceType(device)
+		set_device_type(device)
 		return
 	end
+	--
 
+	--
 	if UserInputService.KeyboardEnabled or UserInputService.MouseEnabled then
 		return
 	end
 
 	if UserInputService.TouchEnabled then
-		InputStore.SetDeviceType("Touch")
+		set_device_type("Touch")
 		return
 	end
 
-	if UserInputService.GamepadEnabled then
-		InputStore.SetDeviceType("Gamepad")
+	if not UserInputService.GamepadEnabled then
+		return
 	end
+	--
+
+	set_device_type("Gamepad")
 end
 
 local function process_input(input_object: InputObject, is_began: boolean)
-	local key_code = input_object.KeyCode
-	local target_key = if key_code == Enum.KeyCode.Unknown then input_object.UserInputType else key_code
+	--
+	const key_code = input_object.KeyCode
+	const target_key = if key_code == UNKNOWN_KEY_CODE then input_object.UserInputType else key_code
 
-	local actions = ActionsByKey[target_key]
+	const actions = ActionsByKey[target_key]
 
 	if actions == nil then
 		return
 	end
+	--
 
+	--
 	for action_name in actions do
 		set_action_state(action_name, is_began, target_key, input_object)
 	end
+	--
 end
---
 
 --
 if RunService:IsClient() then
@@ -430,20 +536,4 @@ if RunService:IsClient() then
 end
 --
 
-type InputUtilModule = {
-	BindAction: (action_name: string, key_array: { InputKey }) -> (),
-	SetPrimitiveBinding: (action_name: string, key_array: { InputKey }) -> (),
-	ResetBinding: (action_name: string?) -> (),
-	GetBinding: (action_name: string) -> { InputKey }?,
-	UnbindAction: (action_name: string) -> (),
-	SetActionState: (action_name: string, is_active: boolean, source: any, input_object: any?) -> (),
-	IsActionActive: (action_name: string) -> boolean,
-	GetMovementVector: () -> Vector3,
-	GetCameraDelta: () -> Vector2,
-	GetDeviceType: () -> DeviceType,
-	Began: Signal.Signal<string, InputObject>,
-	Ended: Signal.Signal<string, InputObject>,
-	BindingChanged: Signal.Signal<string, { InputKey }, { InputKey }?>,
-}
-
-return (InputUtil :: any) :: InputUtilModule
+return InputUtil :: InputUtilModule

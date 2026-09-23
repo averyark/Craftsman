@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > test.luau
     Author      > AveryArk
@@ -6,12 +6,11 @@
     Created     > 16/06/2026
 --]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local _ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-const Craftsman = require("../Packages/_TestIndex/averyark_craftsman@dev/Craftsman")
-const AnimationUtil = require("../Packages/_TestIndex/averyark_craftsman@dev/Craftsman/Utilities/AnimationUtil")
+const _Craftsman = require("../Packages/Craftsman")
+const _AnimationUtil = require("../Packages/Craftsman/Utilities/AnimationUtil")
 
 local test = {}
-
 
 return test

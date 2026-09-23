@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > SmokeRecord.luau
     Author      > AveryArk
@@ -9,9 +9,14 @@
     loader does not pick it up as a module of its own.
 --]]
 
+export type Entry = {
+	name: string,
+	event: string,
+}
+
 local SmokeRecord = {}
 
-SmokeRecord.Events = {}
+SmokeRecord.Events = {} :: { Entry }
 
 function SmokeRecord.Log(name: string, event: string)
 	table.insert(SmokeRecord.Events, { name = name, event = event })

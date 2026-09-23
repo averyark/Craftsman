@@ -1,0 +1,39 @@
+[package]
+name = "averyark/craftsman"
+version = "0.9.0"
+description = "Craftsman is a proprietary roblox scripting framework and scripting kit."
+authors = ["averyark"]
+repository = "averyark/Craftsman"
+license = "MIT"
+
+[target]
+environment = "shared"
+main = "src/init.luau"
+excludes = [
+    "test/**",
+    "test.project.json",
+    "sourcemap.json",
+    ".vscode/**",
+    "rokit.toml",
+    "ember.lock",
+    "stylua.toml",
+    ".gitignore",
+    ".gitattributes",
+    ".luaurc",
+    "Agent.md",
+    "CLAUDE.md",
+    "0.9.0goals.md",
+    "scripts/**",
+    "skills/**",
+    ".claude-plugin/**",
+]
+
+[indices]
+wally = "https://github.com/UpliftGames/wally-index"
+
+[dependencies]
+Promise = { name = "howmanysmall/typed-promise", version = "^4.0.6", index = "wally" }
+ByteNet = { name = "elitriare/bytenet-max", version = "^0.2.7", index = "wally" }
+Signal = { name = "sleitnick/signal", version = "^2.0.3", index = "wally" }
+Keeper = { name = "averyark/keeper", version = "^1.10.2", index = "wally" }
+

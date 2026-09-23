@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > Machine.luau
     Author      > AveryArk
@@ -8,31 +8,36 @@
 
 const RunService = game:GetService("RunService")
 
-const Signal = require("../Signal")
+const Signal = require("../../packages/roblox/Signal")
 const Types = require("./Types")
-const Server = RunService:IsServer() and require("./Server")
-const Client = RunService:IsClient() and require("./Client")
+const Server: ServerModule | false = RunService:IsServer() and require("./Server")
+const Client: ClientModule | false = RunService:IsClient() and require("./Client")
 
 local MachineModule = {}
+
+--
+type ServerModule = typeof(require("./Server"))
+type ClientModule = typeof(require("./Client"))
+--
 
 --[=[
 	@class Machine
 	A hierarchical state machine (HSM) implementation supporting nested states,
 	state replication, and client/server synchronization.
 ]=]
-local Machine = {}
+--
+local Machine = {} :: Types.MachineMethods
 Machine.__index = Machine
+--
 
+--
 export type State = Types.State
 export type Machine = Types.Machine
+--
 
-type PendingTransition = {
-	Target: State,
-	Context: any?,
-	Source: Player?,
-}
-
-local MAX_TRANSITION_BATCH = 10
+--
+const MAX_TRANSITION_BATCH = 10
+--
 
 --[=[
 	@prop Transitioned Signal<Machine, State, State, any, Player>
@@ -55,8 +60,9 @@ local MAX_TRANSITION_BATCH = 10
 	@tag constructor
 	Creates a new State Machine instance.
 ]=]
-local function new(id: string?, is_client_authoritative: boolean?)
-	local self = setmetatable({}, Machine)
+local function new(id: string?, is_client_authoritative: boolean?): Machine
+	--
+	const self = setmetatable({} :: Types.MachineFields, Machine)
 
 	self._Id = id
 	self._ClientAuthoritative = is_client_authoritative == true
@@ -72,45 +78,62 @@ local function new(id: string?, is_client_authoritative: boolean?)
 	self._PendingTransitionTail = 0
 	self._PendingTransitionDrainScheduled = false
 	self._Destroyed = false
+	--
 
 	return self
 end
 
 local function build_ancestor_set(state: State?): { [State]: boolean }
-	local set = {}
+	--
+	const set = {}
 	local node = state
+
 	while node ~= nil do
 		set[node] = true
 		node = node.Parent
 	end
+	--
+
 	return set
 end
 
 local function build_path_to_root(state: State?): { State }
-	local path = {}
+	--
+	const path = {}
 	local node = state
+
 	while node ~= nil do
 		table.insert(path, node)
 		node = node.Parent
 	end
+	--
+
 	return path
 end
 
 local function enqueue_transition(self: Machine, target: State, context: any?, source: Player?)
-	local pending = self._PendingTransitions
-	local next_index = self._PendingTransitionTail + 1
+	--
+	const pending = self._PendingTransitions
+	const next_index = self._PendingTransitionTail + 1
+	--
+
+	--
 	self._PendingTransitionTail = next_index
+
 	pending[next_index] = {
 		Target = target,
 		Context = context,
 		Source = source,
 	}
+	--
 end
 
 local function reset_transition_queue(self: Machine)
+	--
 	table.clear(self._PendingTransitions)
 	self._PendingTransitionHead = 1
 	self._PendingTransitionTail = 0
+	--
 end
 
 --[=[
@@ -122,23 +145,28 @@ end
 	Adds a state to the state machine, optionally setting a parent state for hierarchy.
 ]=]
 function Machine.AddState(self: Machine, state: State, parent: State?): boolean
+	--
 	if state == nil then
 		return false
 	end
 
-	local name = state.Name
-	local existing = self._States[name]
+	const name = state.Name
+	const existing = self._States[name]
+
 	if existing ~= nil and existing ~= state then
 		return false
 	end
+	--
 
+	--
 	self._States[name] = state
+	--
 
-	if parent ~= nil then
-		if not state:_SetParent(parent) then
-			return false
-		end
+	--
+	if parent ~= nil and not state:_SetParent(parent) then
+		return false
 	end
+	--
 
 	return true
 end
@@ -172,7 +200,10 @@ end
 	Sets the unique identifier of the machine.
 ]=]
 function Machine.SetId(self: Machine, id: string): boolean
+	--
 	self._Id = id
+	--
+
 	return true
 end
 
@@ -194,7 +225,10 @@ end
 	Sets whether the state machine transitions are client-authoritative.
 ]=]
 function Machine.SetClientAuthoritative(self: Machine, is_client_authoritative: boolean): boolean
+	--
 	self._ClientAuthoritative = is_client_authoritative == true
+	--
+
 	return true
 end
 
@@ -206,11 +240,16 @@ end
 	Sets the initial starting state for the machine.
 ]=]
 function Machine.SetInitial(self: Machine, state: State): boolean
+	--
 	if state == nil then
 		return false
 	end
+	--
 
+	--
 	self._Initial = state
+	--
+
 	return true
 end
 
@@ -243,6 +282,7 @@ end
 	Starts the state machine, entering the initial state.
 ]=]
 function Machine.Start(self: Machine, context: any?, source: Player?): boolean
+	--
 	if self._Destroyed then
 		return false
 	end
@@ -254,12 +294,20 @@ function Machine.Start(self: Machine, context: any?, source: Player?): boolean
 	if self._Initial == nil then
 		return false
 	end
+	--
 
+	--
 	self._Running = true
-	local ok = self:Transition(self._Initial, context, source)
+	--
+
+	--
+	const ok = self:Transition(self._Initial, context, source)
+
 	if not ok then
 		self._Running = false
 	end
+	--
+
 	return ok
 end
 
@@ -272,6 +320,7 @@ end
 	Stops the state machine, exiting the current active state and any active parent states.
 ]=]
 function Machine.Stop(self: Machine, context: any?, source: Player?): boolean
+	--
 	if self._Destroyed then
 		return false
 	end
@@ -279,23 +328,51 @@ function Machine.Stop(self: Machine, context: any?, source: Player?): boolean
 	if not self._Running then
 		return false
 	end
+	--
 
-	local previous = self._Current
+	--
+	const previous = self._Current
 	local node = previous
+
 	while node ~= nil do
 		node:Exit(context)
 		node = node.Parent
 	end
+	--
 
+	--
 	self._Current = nil
 	self._Running = false
-	--
+
 	reset_transition_queue(self)
+	--
+
+	--
 	self.Transitioned:Fire(self, previous, nil, context, source)
+	--
+
+	return true
+end
+
+local function enter_from_root(self: Machine, target: State, context: any?, source: Player?): boolean
+	--
+	const enter_chain = build_path_to_root(target)
+
+	for index = #enter_chain, 1, -1 do
+		enter_chain[index]:Enter(context)
+	end
+	--
+
+	--
+	self._Current = target
+	self.Transitioned:Fire(self, nil, target, context, source)
+	--
+
 	return true
 end
 
 local function perform_transition(self: Machine, target: State, context: any?, source: Player?): boolean
+	--
 	if self._Destroyed then
 		return false
 	end
@@ -307,37 +384,44 @@ local function perform_transition(self: Machine, target: State, context: any?, s
 	if self._Current == target then
 		return false
 	end
+	--
 
-	local current = self._Current
+	--
+	const current = self._Current
+
 	if current == nil then
-		local enter_chain = build_path_to_root(target)
-		for index = #enter_chain, 1, -1 do
-			enter_chain[index]:Enter(context)
-		end
-		self._Current = target
-		self.Transitioned:Fire(self, current, target, context, source)
-		return true
+		return enter_from_root(self, target, context, source)
 	end
+	--
 
-	local current_ancestors = build_ancestor_set(current)
+	--
+	const current_ancestors = build_ancestor_set(current)
 	local lca = nil
 	local node = target
+
 	while node ~= nil do
 		if current_ancestors[node] then
 			lca = node
 			break
 		end
+
 		node = node.Parent
 	end
+	--
 
+	--
 	node = current
+
 	while node ~= nil and node ~= lca do
 		node:Exit(context)
 		node = node.Parent
 	end
+	--
 
-	local enter_chain = {}
+	--
+	const enter_chain: { State } = {}
 	node = target
+
 	while node ~= nil and node ~= lca do
 		table.insert(enter_chain, node)
 		node = node.Parent
@@ -346,37 +430,63 @@ local function perform_transition(self: Machine, target: State, context: any?, s
 	for index = #enter_chain, 1, -1 do
 		enter_chain[index]:Enter(context)
 	end
+	--
 
+	--
 	self._Current = target
 	self.Transitioned:Fire(self, current, target, context, source)
+	--
+
 	return true
 end
 
+local function run_pending_transition(self: Machine, entry: Types.PendingTransition?)
+	--
+	if entry == nil or entry.Target == nil or entry.Target == self._Current then
+		return
+	end
+	--
+
+	--
+	self._IsTransitioning = true
+	perform_transition(self, entry.Target, entry.Context, entry.Source)
+	self._IsTransitioning = false
+	--
+end
+
 local function process_pending_transitions(self: Machine)
+	--
 	if self._Destroyed or self._IsTransitioning then
 		return
 	end
+	--
 
-	local pending = self._PendingTransitions
+	--
+	const pending = self._PendingTransitions
 	local processed = 0
+	--
 
 	while self._PendingTransitionHead <= self._PendingTransitionTail do
-		local entry = pending[self._PendingTransitionHead]
+		--
+		const entry = pending[self._PendingTransitionHead]
 		pending[self._PendingTransitionHead] = nil
 		self._PendingTransitionHead += 1
+		--
 
-		if entry ~= nil and entry.Target ~= nil and entry.Target ~= self._Current then
-			self._IsTransitioning = true
-			perform_transition(self, entry.Target, entry.Context, entry.Source)
-			self._IsTransitioning = false
-		end
+		--
+		run_pending_transition(self, entry)
+		--
 
+		--
 		processed += 1
+
 		if processed >= MAX_TRANSITION_BATCH then
 			break
 		end
+		--
 	end
 
+	--
 	if self._PendingTransitionHead > self._PendingTransitionTail then
 		reset_transition_queue(self)
 		return
@@ -385,12 +495,16 @@ local function process_pending_transitions(self: Machine)
 	if self._PendingTransitionDrainScheduled then
 		return
 	end
+	--
 
+	--
 	self._PendingTransitionDrainScheduled = true
+
 	task.defer(function()
 		self._PendingTransitionDrainScheduled = false
 		process_pending_transitions(self)
 	end)
+	--
 end
 
 --[=[
@@ -404,6 +518,7 @@ end
 	this transition is enqueued to run sequentially.
 ]=]
 function Machine.Transition(self: Machine, target: State, context: any?, source: Player?): boolean
+	--
 	if self._Destroyed then
 		return false
 	end
@@ -411,16 +526,24 @@ function Machine.Transition(self: Machine, target: State, context: any?, source:
 	if target == nil then
 		return false
 	end
+	--
 
+	--
 	if self._IsTransitioning then
 		enqueue_transition(self, target, context, source)
 		return true
 	end
+	--
 
+	--
 	self._IsTransitioning = true
-	local ok = perform_transition(self, target, context, source)
+	const ok = perform_transition(self, target, context, source)
 	self._IsTransitioning = false
+	--
+
+	--
 	process_pending_transitions(self)
+	--
 
 	return ok
 end
@@ -433,6 +556,7 @@ end
 	Updates the active state and its parent hierarchy by running their Update handlers.
 ]=]
 function Machine.Update(self: Machine, dt: number, context: any?)
+	--
 	if self._Destroyed then
 		return
 	end
@@ -441,15 +565,20 @@ function Machine.Update(self: Machine, dt: number, context: any?)
 		return
 	end
 
-	local current = self._Current
+	const current = self._Current
+
 	if current == nil then
 		return
 	end
+	--
 
-	local chain = build_path_to_root(current)
+	--
+	const chain = build_path_to_root(current)
+
 	for index = #chain, 1, -1 do
 		chain[index]:Update(dt, context)
 	end
+	--
 end
 
 --[=[
@@ -459,31 +588,41 @@ end
 	Destroys the state machine, cleaning up all internal states, signals, and queues.
 ]=]
 function Machine.Destroy(self: Machine): boolean
+	--
 	if self._Destroyed then
 		return false
 	end
+	--
 
+	--
 	self._Destroyed = true
 	self.Destroyed:Fire(self)
 	self.Transitioned:Destroy()
 	self.Destroyed:Destroy()
+	--
 
+	--
 	self._Id = nil
 	self._ClientAuthoritative = false
 	self._Initial = nil
 	self._Current = nil
 	self._Running = false
 	self._IsTransitioning = false
+	--
 
-	local states = self._States
+	--
+	const states = self._States
+
 	if states then
 		table.clear(states)
 	end
 
-	local pending = self._PendingTransitions
+	const pending = self._PendingTransitions
+
 	if pending then
 		reset_transition_queue(self)
 	end
+	--
 
 	return true
 end
@@ -491,16 +630,18 @@ end
 --[=[
 	@method Replicate
 	@within Machine
-	@param targets { any }? -- Optional replication targets (players or namespaces) on server
+	@param targets { Player }? -- Optional replication targets (players or namespaces) on server
 	@return boolean -- Whether replication setup succeeded
 	Registers the machine for networking/replication.
 ]=]
-function Machine.Replicate(self: Machine, targets: { any }?): boolean
+function Machine.Replicate(self: Machine, targets: { Player }?): boolean
+	--
 	if not RunService:IsServer() then
-		return Client:Register(self)
+		return (Client :: ClientModule):Register(self)
 	end
+	--
 
-	return Server:Register(self, targets)
+	return (Server :: ServerModule):Register(self, targets)
 end
 
 --[=[
@@ -510,42 +651,51 @@ end
 	Unregisters the machine from replication.
 ]=]
 function Machine.Unreplicate(self: Machine): boolean
+	--
 	if not RunService:IsServer() then
-		return Client:Unregister(self)
+		return (Client :: ClientModule):Unregister(self)
 	end
+	--
 
-	return Server:Unregister(self)
+	return (Server :: ServerModule):Unregister(self)
 end
 
 --[=[
 	@method SetReplicationTargets
 	@within Machine
-	@param targets { any }? -- New replication targets (players or namespaces)
+	@param targets { Player }? -- New replication targets (players or namespaces)
 	@return boolean -- Whether setting targets succeeded
 	Sets replication targets for the state machine (server-only).
 ]=]
-function Machine.SetReplicationTargets(self: Machine, targets: { any }?): boolean
-	if RunService:IsServer() then
-		return Server:SetTargets(self, targets)
+function Machine.SetReplicationTargets(self: Machine, targets: { Player }?): boolean
+	--
+	if not RunService:IsServer() then
+		return false
 	end
-	return false
+	--
+
+	return (Server :: ServerModule):SetTargets(self, targets)
 end
 
 --[=[
 	@method SyncReplication
 	@within Machine
-	@param targets { any }? -- Optional sync target override
+	@param targets { Player }? -- Optional sync target override
 	@return boolean -- Whether the sync succeeded
 	Manually syncs replication state.
 ]=]
-function Machine.SyncReplication(self: Machine, targets: { any }?): boolean
+function Machine.SyncReplication(self: Machine, targets: { Player }?): boolean
+	--
 	if not RunService:IsServer() then
-		return Client:Sync(self)
+		return (Client :: ClientModule):Sync(self)
 	end
+	--
 
-	return Server:Sync(self, targets)
+	return (Server :: ServerModule):Sync(self, targets)
 end
 
+--
 MachineModule.new = new
+--
 
 return MachineModule

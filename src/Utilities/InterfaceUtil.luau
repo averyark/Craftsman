@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > InterfaceUtil.luau
     Author      > AveryArk
@@ -10,17 +10,16 @@ const RunService = game:GetService("RunService")
 const GuiService = game:GetService("GuiService")
 
 const Config = require("../Config")
-const PrintUtil = require("./PrintUtil")
 
 --[=[
 	@class InterfaceUtil
 	Resolution-independent interface scaling. Drives a UIScale from the viewport so a layout
 	authored at one reference resolution holds up across phones, desktops and consoles.
 ]=]
---
 local InterfaceUtil = {}
 
-export type ScaleMode = "Fit" | "Height" | "Width" | "Diagonal"
+--
+export type ScaleMode = Config.ScaleMode
 
 export type ScaleOptions = {
 	Reference: Vector2?,
@@ -31,12 +30,25 @@ export type ScaleOptions = {
 	Boost: number?,
 }
 
-local active_bindings: { [Instance]: () -> () } = {}
+type ResolvedOptions = {
+	Reference: Vector2,
+	Mode: ScaleMode,
+	Min: number,
+	Max: number,
+	Damping: number,
+	Boost: number,
+}
+--
 
 --
-local function resolve_options(options: ScaleOptions?): ScaleOptions
-	local given = options or {}
-	local defaults = Config.INTERFACE
+const active_bindings: { [Instance]: () -> () } = {}
+--
+
+local function resolve_options(options: ScaleOptions?): ResolvedOptions
+	--
+	const given: ScaleOptions = options or {}
+	const defaults = Config.INTERFACE
+	--
 
 	return {
 		Reference = given.Reference or defaults.REFERENCE,
@@ -47,7 +59,24 @@ local function resolve_options(options: ScaleOptions?): ScaleOptions
 		Boost = given.Boost or 1,
 	}
 end
---
+
+local function compute_base(viewport: Vector2, reference: Vector2, mode: ScaleMode): number
+	--
+	if mode == "Height" then
+		return viewport.Y / reference.Y
+	end
+
+	if mode == "Width" then
+		return viewport.X / reference.X
+	end
+
+	if mode == "Diagonal" then
+		return viewport.Magnitude / reference.Magnitude
+	end
+	--
+
+	return math.min(viewport.X / reference.X, viewport.Y / reference.Y)
+end
 
 --[=[
 	Returns the UIScale factor for a viewport, as a pure function of its arguments.
@@ -66,30 +95,18 @@ end
 	@param options ScaleOptions? -- Overrides for the configured defaults.
 	@return number -- The scale, clamped to [Min, Max].
 ]=]
---
 function InterfaceUtil.ComputeScale(viewport: Vector2, options: ScaleOptions?): number
-	local resolved = resolve_options(options)
-	local reference = resolved.Reference
-
 	--
+	const resolved = resolve_options(options)
+	const reference = resolved.Reference
+
 	if viewport.X <= 0 or viewport.Y <= 0 or reference.X <= 0 or reference.Y <= 0 then
 		return resolved.Min
 	end
 	--
 
 	--
-	local base
-	local mode = resolved.Mode
-
-	if mode == "Height" then
-		base = viewport.Y / reference.Y
-	elseif mode == "Width" then
-		base = viewport.X / reference.X
-	elseif mode == "Diagonal" then
-		base = viewport.Magnitude / reference.Magnitude
-	else
-		base = math.min(viewport.X / reference.X, viewport.Y / reference.Y)
-	end
+	local base = compute_base(viewport, reference, resolved.Mode)
 	--
 
 	--
@@ -115,16 +132,15 @@ end
 	@param options ScaleOptions? -- Overrides for the configured defaults.
 	@return () -> () -- Unbinds and restores.
 ]=]
---
 function InterfaceUtil:AutoScale(target: Instance, options: ScaleOptions?): () -> ()
 	--
 	if RunService:IsServer() then
-		PrintUtil:Error("InterfaceUtil:AutoScale is client-only; there is no viewport on the server.", 2)
+		error("InterfaceUtil:AutoScale is client-only; there is no viewport on the server.", 2)
 	end
 	--
 
 	--
-	local existing = active_bindings[target]
+	const existing = active_bindings[target]
 
 	if existing then
 		existing()
@@ -132,81 +148,106 @@ function InterfaceUtil:AutoScale(target: Instance, options: ScaleOptions?): () -
 	--
 
 	--
-	local scale = target:FindFirstChildWhichIsA("UIScale")
-	local created = scale == nil
-	local previous = if scale then scale.Scale else nil
+	const found = target:FindFirstChildWhichIsA("UIScale")
+	const created = found == nil
+	const previous = if found then found.Scale else nil
+	const scale = found or Instance.new("UIScale")
 
-	if not scale then
-		scale = Instance.new("UIScale")
+	if not found then
 		scale.Parent = target
 	end
 	--
 
 	--
-	local bound = table.clone(options or {})
+	const bound = table.clone(options or {} :: ScaleOptions)
 
 	if bound.Boost == nil then
 		bound.Boost = if GuiService:IsTenFootInterface() then Config.INTERFACE.TEN_FOOT_BOOST else 1
 	end
 	--
 
-	local viewport_connection = nil
-
 	--
+	local viewport_connection: RBXScriptConnection? = nil
+	--
+
 	local function apply()
-		local camera = workspace.CurrentCamera
+		--
+		const camera = workspace.CurrentCamera
 
 		if not camera then
 			return
 		end
+		--
 
+		--
 		scale.Scale = InterfaceUtil.ComputeScale(camera.ViewportSize, bound)
+		--
 	end
-	--
 
-	--
 	local function bind_camera()
+		--
 		if viewport_connection then
 			viewport_connection:Disconnect()
 			viewport_connection = nil
 		end
+		--
 
-		local camera = workspace.CurrentCamera
-		
+		--
+		const camera = workspace.CurrentCamera
+
 		if not camera then
 			return
 		end
+		--
 
+		--
 		viewport_connection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(apply)
+		--
+
 		apply()
 	end
-	--
 
-	local camera_connection = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bind_camera)
+	--
+	const camera_connection = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bind_camera)
 	bind_camera()
-
 	--
+
 	local function unbind()
+		--
 		if active_bindings[target] ~= nil then
 			active_bindings[target] = nil
 		end
+		--
 
+		--
 		camera_connection:Disconnect()
 
 		if viewport_connection then
 			viewport_connection:Disconnect()
 			viewport_connection = nil
 		end
+		--
 
+		--
 		if created then
 			scale:Destroy()
-		elseif scale.Parent then
-			scale.Scale = previous
+			return
 		end
+
+		if not scale.Parent then
+			return
+		end
+		--
+
+		--
+		scale.Scale = previous :: number
+		--
 	end
+
+	--
+	active_bindings[target] = unbind
 	--
 
-	active_bindings[target] = unbind
 	return unbind
 end
 

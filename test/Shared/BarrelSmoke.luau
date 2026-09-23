@@ -1,4 +1,4 @@
---!nonstrict
+--!strict
 --[[
     FileName    > BarrelSmoke.luau
     Author      > AveryArk
@@ -30,15 +30,9 @@ local EXPORTS = {
 	"Pathfind",
 	"Spring",
 	"Entity",
-	"DataServer",
-	"DataClient",
-	"MarketServer",
-	"MarketClient",
 	"StateMachine",
 	"StateMachineServer",
 	"StateMachineClient",
-	"StoreServer",
-	"StoreClient",
 	"InputUtil",
 	"InterfaceUtil",
 	"PrintUtil",
@@ -50,19 +44,16 @@ local EXPORTS = {
 	"Tag",
 	"MathUtil",
 	"StringUtil",
+	"Inspect",
 	"Config",
-	"Store",
 }
 
 local SERVER_ONLY = {
-	DataServer = true,
-	MarketServer = true,
 	StateMachineServer = true,
-	StoreServer = true,
 }
 
--- Shared/Bootstrap touches Component, Entity, and the Data/Market/StateMachine/Store
--- pairs before the loader runs. These are the exports it never mentions, so if the
+-- Shared/Bootstrap touches Component, Entity, and the StateMachine pair before
+-- the loader runs. These are the exports it never mentions, so if the
 -- barrel is lazy they must still be unresolved by the time Start is called.
 local UNTOUCHED_BY_BOOTSTRAP = {
 	"Pathfind",

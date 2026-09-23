@@ -10,8 +10,45 @@
 	@class TableUtil
 	A utility library containing operations for manipulating and querying Luau tables.
 ]=]
---
 local TableUtil = {}
+
+local function has_only_number_keys(tbl: { [any]: any }): boolean
+	--
+	for key in tbl do
+		if type(key) == "number" then
+			continue
+		end
+
+		return false
+	end
+	--
+
+	return true
+end
+
+local function build_lookup(tbl: { [any]: any }): { [any]: boolean }
+	--
+	const lookup = {}
+	--
+
+	--
+	if not has_only_number_keys(tbl) then
+		for key in tbl do
+			lookup[key] = true
+		end
+
+		return lookup
+	end
+	--
+
+	--
+	for _, value in tbl do
+		lookup[value] = true
+	end
+	--
+
+	return lookup
+end
 
 --[=[
 	Recursively deep clones a value, supporting cyclic/nested tables via a seen-table cache.
@@ -20,27 +57,35 @@ local TableUtil = {}
 	@param seen { [any]: any }? -- Optional cache of already cloned tables (used internally for cyclic structures).
 	@return T -- The deep cloned value or table.
 ]=]
---
 function TableUtil.DeepClone<T>(value: T, seen: { [any]: any }?): T
-	if type(value) ~= "table" then
+	--
+	const input: unknown = value
+
+	if type(input) ~= "table" then
 		return value
 	end
 
-	if getmetatable(value :: any) ~= nil then
+	if getmetatable(input) ~= nil then
 		return value
 	end
+	--
 
-	local seen_table = seen or {}
+	--
+	const seen_table = seen or {}
+
 	if seen_table[value] then
 		return seen_table[value]
 	end
+	--
 
-	local clone = {}
+	--
+	const clone = {}
 	seen_table[value] = clone
 
 	for key, child in value :: any do
 		clone[TableUtil.DeepClone(key, seen_table :: any)] = TableUtil.DeepClone(child, seen_table)
 	end
+	--
 
 	return clone :: any
 end
@@ -50,11 +95,13 @@ end
 	@param ... { [any]: any } -- The list of tables to merge.
 	@return { [any]: any } -- A new merged dictionary.
 ]=]
---
 function TableUtil.Merge(...: { [any]: any }): { [any]: any }
-	local merged = {}
-	local sources = { ... }
+	--
+	const merged = {}
+	const sources = { ... }
+	--
 
+	--
 	for _, source in sources do
 		if type(source) ~= "table" then
 			continue
@@ -64,6 +111,7 @@ function TableUtil.Merge(...: { [any]: any }): { [any]: any }
 			merged[key] = value
 		end
 	end
+	--
 
 	return merged
 end
@@ -73,31 +121,33 @@ end
 	@param ... { [any]: any } -- The list of tables to deep-merge.
 	@return { [any]: any } -- A new deeply-merged dictionary.
 ]=]
---
 function TableUtil.DeepMerge(...: { [any]: any }): { [any]: any }
-	local merged = {}
-	local sources = { ... }
+	--
+	const merged = {}
+	const sources = { ... }
+	--
 
+	--
 	for _, source in sources do
 		if type(source) ~= "table" or getmetatable(source :: any) ~= nil then
 			continue
 		end
 
 		for key, value in source do
-			if
-				type(value) == "table"
-				and getmetatable(value) == nil
-				and type(merged[key]) == "table"
-				and getmetatable(merged[key]) == nil
-			then
-				merged[key] = TableUtil.DeepMerge(merged[key], value)
-			elseif type(value) == "table" and getmetatable(value) == nil then
-				merged[key] = TableUtil.DeepClone(value)
-			else
+			if type(value) ~= "table" or getmetatable(value) ~= nil then
 				merged[key] = value
+				continue
 			end
+
+			if type(merged[key]) == "table" and getmetatable(merged[key]) == nil then
+				merged[key] = TableUtil.DeepMerge(merged[key], value)
+				continue
+			end
+
+			merged[key] = TableUtil.DeepClone(value)
 		end
 	end
+	--
 
 	return merged
 end
@@ -107,7 +157,6 @@ end
 	@param dict { [any]: any } -- The dictionary to check.
 	@return boolean -- `true` if the dictionary has no keys, `false` otherwise.
 ]=]
---
 function TableUtil.IsEmpty(dict: { [any]: any }): boolean
 	return next(dict) == nil
 end
@@ -117,13 +166,14 @@ end
 	@param dict { [K]: any } -- The source dictionary.
 	@return { K } -- An array of keys from the dictionary.
 ]=]
---
 function TableUtil.Keys<K>(dict: { [K]: any }): { K }
-	local keys = {}
+	--
+	const keys = {}
 
 	for key in dict do
 		table.insert(keys, key)
 	end
+	--
 
 	return keys
 end
@@ -133,13 +183,14 @@ end
 	@param dict { [any]: V } -- The source dictionary.
 	@return { V } -- An array of values from the dictionary.
 ]=]
---
 function TableUtil.Values<V>(dict: { [any]: V }): { V }
-	local values = {}
+	--
+	const values = {}
 
 	for _, value in dict do
 		table.insert(values, value)
 	end
+	--
 
 	return values
 end
@@ -150,13 +201,16 @@ end
 	@param target_value V -- The value to look for.
 	@return K? -- The key corresponding to the value, or `nil` if not found.
 ]=]
---
 function TableUtil.FindKeyByValue<K, V>(dict: { [K]: V }, target_value: V): K?
+	--
 	for key, value in dict do
-		if value == target_value then
-			return key
+		if value ~= target_value then
+			continue
 		end
+
+		return key
 	end
+	--
 
 	return nil
 end
@@ -167,8 +221,8 @@ end
 	@param target_value V -- The value to remove.
 	@return boolean -- `true` if at least one value was removed, `false` otherwise.
 ]=]
---
 function TableUtil.RemoveValue<K, V>(dict: { [K]: V }, target_value: V): boolean
+	--
 	local removed = false
 
 	for key, value in dict do
@@ -179,6 +233,7 @@ function TableUtil.RemoveValue<K, V>(dict: { [K]: V }, target_value: V): boolean
 		(dict :: any)[key] = nil
 		removed = true
 	end
+	--
 
 	return removed
 end
@@ -189,8 +244,8 @@ end
 	@param predicate (value: V, key: K, dict: { [K]: V }) -> boolean -- The function to determine removal.
 	@return boolean -- `true` if at least one pair was removed, `false` otherwise.
 ]=]
---
 function TableUtil.RemoveWhere<K, V>(dict: { [K]: V }, predicate: (value: V, key: K, dict: { [K]: V }) -> boolean): boolean
+	--
 	local removed = false
 
 	for key, value in dict do
@@ -201,6 +256,7 @@ function TableUtil.RemoveWhere<K, V>(dict: { [K]: V }, predicate: (value: V, key
 		(dict :: any)[key] = nil
 		removed = true
 	end
+	--
 
 	return removed
 end
@@ -211,7 +267,6 @@ end
 	@param key K -- The key to look for.
 	@return boolean -- `true` if the key exists, `false` otherwise.
 ]=]
---
 function TableUtil.HasKey<K>(dict: { [K]: any }, key: K): boolean
 	return dict[key] ~= nil
 end
@@ -223,12 +278,14 @@ end
 	@param default_value V -- The fallback value if key is missing.
 	@return V -- The value or the default value.
 ]=]
---
 function TableUtil.GetOrDefault<K, V>(dict: { [K]: V }, key: K, default_value: V): V
-	local value = dict[key]
+	--
+	const value = dict[key]
+
 	if value ~= nil then
 		return value
 	end
+	--
 
 	return default_value
 end
@@ -238,13 +295,14 @@ end
 	@param dict { [any]: any } -- The dictionary to count.
 	@return number -- The total count of entries.
 ]=]
---
 function TableUtil.Count(dict: { [any]: any }): number
+	--
 	local count = 0
 
 	for _ in dict do
 		count += 1
 	end
+	--
 
 	return count
 end
@@ -256,12 +314,14 @@ end
 	@param seen { [any]: any }? -- Optional cache of already-compared tables (used internally).
 	@return boolean -- `true` if both values are deeply equal, `false` otherwise.
 ]=]
---
 function TableUtil.EqualDeep(left: any, right: any, seen: { [any]: any }?): boolean
+	--
 	if left == right then
 		return true
 	end
+	--
 
+	--
 	if type(left) ~= "table" or type(right) ~= "table" then
 		return false
 	end
@@ -269,29 +329,40 @@ function TableUtil.EqualDeep(left: any, right: any, seen: { [any]: any }?): bool
 	if getmetatable(left) ~= nil or getmetatable(right) ~= nil then
 		return false
 	end
+	--
 
-	local seen_table = seen or {}
+	--
+	const seen_table = seen or {}
 	local left_seen = seen_table[left]
+
 	if left_seen and left_seen[right] then
 		return true
 	end
+	--
 
+	--
 	left_seen = left_seen or {}
 	seen_table[left] = left_seen
 	left_seen[right] = true
+	--
 
+	--
 	for key, left_value in left :: any do
-		local right_value = (right :: any)[key]
+		const right_value = (right :: any)[key]
+
 		if not TableUtil.EqualDeep(left_value, right_value, seen_table) then
 			return false
 		end
 	end
+	--
 
+	--
 	for key, _ in right :: any do
 		if (left :: any)[key] == nil then
 			return false
 		end
 	end
+	--
 
 	return true
 end
@@ -302,14 +373,20 @@ end
 	@param value T -- The value to remove.
 	@return boolean -- `true` if the value was found and removed, `false` otherwise.
 ]=]
---
 function TableUtil.SafeRemove<T>(array: { T }, value: T): boolean
-	local index = table.find(array, value)
-	if index then
-		table.remove(array, index)
-		return true
+	--
+	const index = table.find(array, value)
+
+	if not index then
+		return false
 	end
-	return false
+	--
+
+	--
+	table.remove(array, index)
+	--
+
+	return true
 end
 
 --[=[
@@ -318,9 +395,10 @@ end
 	@param value T -- The value to remove.
 	@return boolean -- `true` if at least one value was found and removed, `false` otherwise.
 ]=]
---
 function TableUtil.SafeRemoveAll<T>(array: { T }, value: T): boolean
+	--
 	local removed = false
+
 	for i = #array, 1, -1 do
 		if array[i] ~= value then
 			continue
@@ -329,6 +407,8 @@ function TableUtil.SafeRemoveAll<T>(array: { T }, value: T): boolean
 		table.remove(array, i)
 		removed = true
 	end
+	--
+
 	return removed
 end
 
@@ -339,54 +419,35 @@ end
 	@param second { [any]: any } -- The items to exclude.
 	@return { [K]: V } -- A new table without the items from the second table.
 ]=]
---
 function TableUtil.Except<K, V>(first: { [K]: V }, second: { [any]: any }): { [K]: V }
-	local result = {}
-	local lookup = {}
+	--
+	const result = {}
+	const lookup = build_lookup(second :: any)
+	--
 
-	local second_is_array = true
-	for key in second :: any do
-		if type(key) == "number" then
-			continue
-		end
-
-		second_is_array = false
-		break
-	end
-
-	if second_is_array then
-		for _, value in second :: any do
-			lookup[value] = true
-		end
-	else
-		for key in second :: any do
-			lookup[key] = true
-		end
-	end
-
-	local first_is_array = true
-	for key in first :: any do
-		if type(key) == "number" then
-			continue
-		end
-
-		first_is_array = false
-		break
-	end
-
-	if first_is_array then
-		for _, value in first :: any do
-			if not lookup[value] then
-				table.insert(result, value)
-			end
-		end
-	else
+	--
+	if not has_only_number_keys(first :: any) then
 		for key, value in first :: any do
-			if not lookup[key] then
-				result[key] = value
+			if lookup[key] then
+				continue
 			end
+
+			result[key] = value
 		end
+
+		return result :: any
 	end
+	--
+
+	--
+	for _, value in first :: any do
+		if lookup[value] then
+			continue
+		end
+
+		table.insert(result, value)
+	end
+	--
 
 	return result :: any
 end
