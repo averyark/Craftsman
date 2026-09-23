@@ -1,5 +1,5 @@
 ---
-name: craftsman
+name: craftsman-kit
 description: Use when writing or reviewing Roblox Luau code in a project that depends on the Craftsman framework (averyark/craftsman-kit), or when the user mentions Craftsman or one of its modules (Component, Entity, Tag, StateMachine, Queue, Debounce, Concurrency, Pathfind, Spring, TweenUtil, SoundUtil, AnimationUtil, InputUtil, TouchUtil, InterfaceUtil, WorldUtil, MathUtil, StringUtil, TableUtil, PrintUtil, Inspect). Explains how to bootstrap the game and which Craftsman utility to reach for, and gives exact call signatures, call syntax and gotchas so the agent does not hand-roll what the framework already provides.
 license: MIT
 metadata:

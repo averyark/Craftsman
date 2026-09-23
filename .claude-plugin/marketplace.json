@@ -1,11 +1,11 @@
 {
-  "name": "craftsman",
+  "name": "craftsman-kit",
   "owner": {
     "name": "averyark"
   },
   "plugins": [
     {
-      "name": "craftsman",
+      "name": "craftsman-kit",
       "source": "./",
       "description": "Agent skill for the Craftsman Roblox Luau framework: which module to use, exact call signatures and gotchas.",
       "strict": false

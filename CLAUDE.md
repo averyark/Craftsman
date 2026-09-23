@@ -1,7 +1,7 @@
 # Scope
-This file defines how Craftsman code is written: formatting, comments, naming and typing. It does not cover how to use the framework; that lives in the `craftsman` skill at `skills/craftsman/`.
+This file defines how Craftsman code is written: formatting, comments, naming and typing. It does not cover how to use the framework; that lives in the `craftsman-kit` skill at `skills/craftsman-kit/`.
 
-Before writing, reviewing or changing code that uses a Craftsman module, read `skills/craftsman/SKILL.md` and the reference files it links for the modules involved. When a change alters a public API, update the matching `skills/craftsman/references/*.md` in the same change.
+Before writing, reviewing or changing code that uses a Craftsman module, read `skills/craftsman-kit/SKILL.md` and the reference files it links for the modules involved. When a change alters a public API, update the matching `skills/craftsman-kit/references/*.md` in the same change.
 
 # Syntax & Style
 * **Typing:** `strict` mode (`--!strict` directive on line 1). The bar is zero diagnostics under Luau's new type solver: run `scripts/analyze.ps1`.

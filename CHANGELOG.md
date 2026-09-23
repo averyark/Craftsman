@@ -20,7 +20,7 @@ Craftsman = { name = "averyark/craftsman-kit", version = "^0.9.0", index = "wall
 ```
 
 The agent skill moves with the repository: `/plugin marketplace add averyark/craftsman-kit`
-and `npx skills add averyark/craftsman-kit`. The plugin itself is still `craftsman@craftsman`.
+and `npx skills add averyark/craftsman-kit`. The plugin is now `craftsman-kit@craftsman-kit`.
 
 ---
 
