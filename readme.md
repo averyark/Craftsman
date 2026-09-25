@@ -16,6 +16,27 @@ Install it with [Ember](https://luaupm.com). Craftsman is published to the Wally
 
 Craftsman Kit was published as `averyark/craftsman` up to 0.9.0. Name the dependency `Craftsman` in `ember.toml`, as above, and existing `Craftsman.*` code keeps working unchanged.
 
+### Alongside Wally
+
+`wally install` deletes `Packages/`, and on Windows and macOS that is the same folder as Ember's `packages/`. In a project that also uses Wally, install Ember elsewhere:
+
+```toml
+# ember.toml
+[config]
+roblox-packages-out = "ember"
+```
+
+and map both into one `Packages` in Rojo:
+
+```json
+"Packages": {
+  "$path": "Packages",
+  "Craftsman": { "$path": "ember/Craftsman.luau" },
+  "Lifecycle": { "$path": "ember/Lifecycle.luau" },
+  ".ember": { "$path": "ember/.ember" }
+}
+```
+
 ## Agent skill
 
 `skills/craftsman-kit/` is an [Agent Skill](https://agentskills.io) that teaches coding agents (Claude Code, Codex, Cursor and others) which Craftsman module to use and how to call it. It is not part of the published package.
